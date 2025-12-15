@@ -1,0 +1,14 @@
+# Docker Compose
+
+version: "3.8"
+
+services:
+  immich-swipe:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: immich-swipe
+    restart: unless-stopped
+    ports:
+      - "2293:80"
+
