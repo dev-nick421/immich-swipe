@@ -5,7 +5,7 @@ import { computed } from 'vue'
 const uiStore = useUiStore()
 
 const toastClasses = computed(() => {
-  const base = 'fixed bottom-24 left-1/2 -translate-x-1/2 px-6 py-3 rounded-full shadow-lg transition-all duration-300 z-50'
+  const base = 'fixed top-24 left-1/2 -translate-x-1/2 px-6 py-3 rounded-full shadow-lg transition-all duration-300 z-50'
   const visibility = uiStore.showToast ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4 pointer-events-none'
 
   let color = ''
