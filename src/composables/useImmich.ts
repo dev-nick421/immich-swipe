@@ -146,6 +146,17 @@ export function useImmich() {
     }
   }
 
+  // Re-useable helper to show an asset and ensure we have a sensible "next" lined up
+  function setCurrentAssetWithFallback(asset: ImmichAsset, resumeAsset: ImmichAsset | null): void {
+    currentAsset.value = asset
+
+    if (resumeAsset && resumeAsset.id !== asset.id) {
+      nextAsset.value = resumeAsset
+    } else if (!nextAsset.value) {
+      preloadNextAsset()
+    }
+  }
+
   // Move to the next asset
   function moveToNextAsset(): void {
     if (nextAsset.value) {
@@ -248,12 +259,15 @@ export function useImmich() {
     }
 
     const assetToRestore = lastDeletedAsset.value
+    const assetToResumeAfterUndo = currentAsset.value
     const success = await restoreAsset(assetToRestore.id)
 
     if (success) {
       uiStore.decrementDeleted()
       uiStore.toast(`${assetToRestore.originalFileName} was restored`, 'success', 2500)
       lastDeletedAsset.value = null
+
+      setCurrentAssetWithFallback(assetToRestore, assetToResumeAfterUndo)
     } else {
       uiStore.toast('Failed to restore photo', 'error')
     }
