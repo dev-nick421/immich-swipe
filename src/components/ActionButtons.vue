@@ -5,13 +5,21 @@ const uiStore = useUiStore()
 
 defineProps<{
   canUndo: boolean
+  isAlbumDragActive?: boolean
 }>()
 
 const emit = defineEmits<{
   keep: []
   delete: []
   undo: []
+  openAlbumPicker: []
+  albumDrop: []
 }>()
+
+function handleAlbumDrop(e: DragEvent) {
+  e.preventDefault()
+  emit('albumDrop')
+}
 </script>
 
 <template>
@@ -45,6 +53,26 @@ const emit = defineEmits<{
     >
       <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+      </svg>
+    </button>
+
+    <!-- Album -->
+    <button
+      @click="emit('openAlbumPicker')"
+      @dragover.prevent
+      @dragenter.prevent
+      @drop="handleAlbumDrop"
+      class="w-16 h-16 rounded-full flex items-center justify-center transition-all active:scale-90 shadow-lg"
+      :class="[
+        uiStore.isDarkMode
+          ? ['bg-gray-800 hover:bg-blue-600 text-white', isAlbumDragActive ? 'ring-4 ring-blue-500' : '']
+          : ['bg-white hover:bg-blue-500 hover:text-white text-blue-600 border border-blue-200', isAlbumDragActive ? 'ring-4 ring-blue-400' : '']
+      ]"
+      aria-label="Add to album"
+      title="Add to album"
+    >
+      <svg class="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h10M16 18h4M8 6v12" />
       </svg>
     </button>
 

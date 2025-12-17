@@ -53,3 +53,37 @@ export interface EnvConfig {
   serverUrl: string
   users: EnvUser[]
 }
+
+export interface ImmichAlbum {
+  id: string
+  albumName: string
+  assetCount?: number
+  createdAt?: string
+  updatedAt?: string
+  albumThumbnailAssetId?: string
+}
+
+export interface AddAssetsToAlbumRequest {
+  ids: string[]
+}
+
+export interface MetadataSearchRequest {
+  take: number
+  skip: number
+  page?: number
+  size?: number
+  order?: 'asc' | 'desc'
+  assetType?: ('IMAGE' | 'VIDEO')[]
+}
+
+export interface MetadataSearchResponse {
+  items?: ImmichAsset[]
+  hasNextPage?: boolean
+  count?: number
+  nextPage?: string | number | null
+  assets?: {
+    total?: number
+    count?: number
+    items: ImmichAsset[]
+  }
+}

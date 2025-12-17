@@ -2,9 +2,11 @@
 import { useUiStore } from '@/stores/ui'
 import { useAuthStore } from '@/stores/auth'
 import { useRouter } from 'vue-router'
+import { usePreferencesStore } from '@/stores/preferences'
 
 const uiStore = useUiStore()
 const authStore = useAuthStore()
+const preferencesStore = usePreferencesStore()
 const router = useRouter()
 
 function logout() {
@@ -21,6 +23,17 @@ function logout() {
   } else {
     router.push('/login')
   }
+}
+
+function toggleReviewOrder() {
+  const current = preferencesStore.reviewOrder
+  const next =
+    current === 'random'
+      ? 'chronological'
+      : current === 'chronological'
+        ? 'chronological-desc'
+        : 'random'
+  preferencesStore.setReviewOrder(next)
 }
 </script>
 
@@ -83,6 +96,56 @@ function logout() {
         <span>
           {{ uiStore.skipVideos ? 'Skip videos: On' : 'Skip videos: Off' }}
         </span>
+      </button>
+
+      <!-- Review order toggle -->
+      <button
+        @click="toggleReviewOrder"
+        class="flex items-center gap-2 px-3 py-1 rounded-full text-xs font-medium border transition-colors"
+        :class="preferencesStore.reviewOrder !== 'random'
+          ? 'bg-blue-600 border-blue-500 text-white'
+          : uiStore.isDarkMode
+            ? 'border-gray-700 text-gray-300 hover:bg-gray-800'
+            : 'border-gray-300 text-gray-600 hover:bg-gray-100'"
+        :aria-pressed="preferencesStore.reviewOrder !== 'random'"
+        :aria-label="preferencesStore.reviewOrder === 'chronological'
+          ? 'Order: Oldest first'
+          : preferencesStore.reviewOrder === 'chronological-desc'
+            ? 'Order: Newest first'
+            : 'Order: Random'"
+        :title="preferencesStore.reviewOrder === 'chronological'
+          ? 'Order: Oldest first'
+          : preferencesStore.reviewOrder === 'chronological-desc'
+            ? 'Order: Newest first'
+            : 'Order: Random'"
+      >
+        <svg
+          v-if="preferencesStore.reviewOrder === 'random'"
+          class="w-4 h-4"
+          fill="none"
+          stroke="currentColor"
+          viewBox="0 0 24 24"
+        >
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4l6 6m0 0L4 16m6-6h10M20 4l-6 6m0 0 6 6m-6-6H10" />
+        </svg>
+        <svg
+          v-else-if="preferencesStore.reviewOrder === 'chronological'"
+          class="w-4 h-4"
+          fill="none"
+          stroke="currentColor"
+          viewBox="0 0 24 24"
+        >
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8h10M4 12h7M4 16h4M18 18V6m0 0-3 3m3-3 3 3" />
+        </svg>
+        <svg
+          v-else
+          class="w-4 h-4"
+          fill="none"
+          stroke="currentColor"
+          viewBox="0 0 24 24"
+        >
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8h4M4 12h7M4 16h10M18 6v12m0 0-3-3m3 3 3-3" />
+        </svg>
       </button>
 
       <!-- Theme toggle -->

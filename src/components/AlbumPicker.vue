@@ -1,0 +1,166 @@
+<script setup lang="ts">
+import { computed, ref, watch } from 'vue'
+import type { ImmichAlbum } from '@/types/immich'
+
+const props = defineProps<{
+  open: boolean
+  albums: ImmichAlbum[]
+  loading: boolean
+  error: string | null
+  hotkeys: Record<string, string>
+}>()
+
+const emit = defineEmits<{
+  close: []
+  select: [ImmichAlbum]
+  assignHotkey: [string, string | null]
+}>()
+
+const search = ref('')
+
+const filteredAlbums = computed(() => {
+  if (!search.value) return props.albums
+  return props.albums.filter((album) =>
+    album.albumName.toLowerCase().includes(search.value.toLowerCase())
+  )
+})
+
+const hotkeyOptions = computed(() => props.albums.map((album) => ({
+  label: album.albumName,
+  value: album.id,
+})))
+
+function handleSelect(album: ImmichAlbum) {
+  emit('select', album)
+}
+
+function handleHotkeyChange(key: string, value: string) {
+  emit('assignHotkey', key, value || null)
+}
+
+watch(
+  () => props.open,
+  (isOpen) => {
+    if (!isOpen) {
+      search.value = ''
+    }
+  }
+)
+</script>
+
+<template>
+  <transition name="fade">
+    <div
+      v-if="open"
+      class="fixed inset-0 z-30 flex items-end sm:items-center justify-center bg-black/60 px-4"
+      @click="emit('close')"
+    >
+      <div
+        class="w-full max-w-3xl bg-white dark:bg-gray-900 rounded-t-2xl sm:rounded-2xl shadow-2xl overflow-hidden"
+        @click.stop
+      >
+        <div class="flex items-center justify-between px-4 py-3 border-b border-gray-200 dark:border-gray-800">
+          <div>
+            <p class="text-sm text-gray-500 dark:text-gray-400">Add to album</p>
+            <h2 class="text-xl font-semibold text-gray-900 dark:text-gray-50">Choose an album</h2>
+          </div>
+          <button
+            class="p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-800"
+            @click="emit('close')"
+            aria-label="Close album picker"
+          >
+            <svg class="w-5 h-5 text-gray-600 dark:text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+
+        <div class="px-4 py-3 flex flex-col gap-4">
+          <div class="flex flex-col sm:flex-row gap-3">
+            <input
+              v-model="search"
+              type="text"
+              placeholder="Search album"
+              class="flex-1 px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+            <div class="text-sm text-gray-500 dark:text-gray-400 flex items-center">
+              0–9 Hotkeys configurable below
+            </div>
+          </div>
+
+          <div v-if="loading" class="flex items-center justify-center py-10">
+            <div class="w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
+          </div>
+
+          <div v-else-if="error" class="p-4 rounded-lg bg-red-50 text-red-700 border border-red-200">
+            {{ error }}
+          </div>
+
+          <div v-else class="grid sm:grid-cols-2 gap-3 max-h-[340px] overflow-y-auto pr-1">
+            <div
+              v-for="album in filteredAlbums"
+              :key="album.id"
+              class="p-3 rounded-lg border border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-800/50 flex items-center justify-between gap-3 hover:border-blue-400 transition-colors"
+            >
+              <div>
+                <p class="font-medium text-gray-900 dark:text-gray-100">{{ album.albumName }}</p>
+                <p v-if="album.assetCount !== undefined" class="text-xs text-gray-500 dark:text-gray-400">
+                  {{ album.assetCount }} items
+                </p>
+              </div>
+              <button
+                class="px-3 py-1 rounded-full text-sm font-medium bg-blue-600 text-white hover:bg-blue-700 transition-colors"
+                @click="handleSelect(album)"
+              >
+                Add
+              </button>
+            </div>
+            <p v-if="filteredAlbums.length === 0" class="col-span-2 text-sm text-gray-500 dark:text-gray-400 py-4 text-center">
+              No albums found.
+            </p>
+          </div>
+
+          <div class="border-t border-gray-200 dark:border-gray-800 pt-4">
+            <p class="text-sm font-semibold text-gray-800 dark:text-gray-100 mb-3">Hotkey mapping</p>
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div
+                v-for="key in ['0','1','2','3','4','5','6','7','8','9']"
+                :key="key"
+                class="flex items-center gap-3"
+              >
+                <span class="w-8 h-8 rounded-full bg-gray-100 dark:bg-gray-800 text-gray-800 dark:text-gray-200 flex items-center justify-center font-semibold border border-gray-200 dark:border-gray-700">
+                  {{ key }}
+                </span>
+                <select
+                  class="flex-1 px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  :value="hotkeys[key] || ''"
+                  @change="handleHotkeyChange(key, ($event.target as HTMLSelectElement).value)"
+                >
+                  <option value="">Not set</option>
+                  <option
+                    v-for="option in hotkeyOptions"
+                    :key="option.value"
+                    :value="option.value"
+                  >
+                    {{ option.label }}
+                  </option>
+                </select>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </transition>
+</template>
+
+<style scoped>
+.fade-enter-active,
+.fade-leave-active {
+  transition: opacity 0.2s ease;
+}
+.fade-enter-from,
+.fade-leave-to {
+  opacity: 0;
+}
+</style>

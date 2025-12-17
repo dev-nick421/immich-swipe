@@ -1,15 +1,34 @@
 <script setup lang="ts">
-import { onMounted, onUnmounted, computed } from 'vue'
+import { onMounted, onUnmounted, computed, ref, watch } from 'vue'
 import { useImmich } from '@/composables/useImmich'
 import { useUiStore } from '@/stores/ui'
+import { usePreferencesStore } from '@/stores/preferences'
+import type { ImmichAlbum } from '@/types/immich'
 import AppHeader from '@/components/AppHeader.vue'
 import SwipeCard from '@/components/SwipeCard.vue'
 import ActionButtons from '@/components/ActionButtons.vue'
+import AlbumPicker from '@/components/AlbumPicker.vue'
 
-const { currentAsset, lastDeletedAsset, error, loadInitialAsset, keepPhoto, deletePhoto, undoDelete } = useImmich()
+const {
+  currentAsset,
+  lastDeletedAsset,
+  error,
+  loadInitialAsset,
+  keepPhoto,
+  keepPhotoToAlbum,
+  deletePhoto,
+  undoDelete,
+  fetchAlbums,
+} = useImmich()
 const uiStore = useUiStore()
+const preferencesStore = usePreferencesStore()
 
 const canUndo = computed(() => lastDeletedAsset.value !== null)
+const showAlbumPicker = ref(false)
+const isLoadingAlbums = ref(false)
+const albumsError = ref<string | null>(null)
+const albums = ref<ImmichAlbum[]>([])
+const isAlbumDragActive = ref(false)
 
 // Keyboard navigation
 function handleKeydown(e: KeyboardEvent) {
@@ -27,8 +46,74 @@ function handleKeydown(e: KeyboardEvent) {
   } else if ((e.ctrlKey || e.metaKey) && e.key === 'z') {
     e.preventDefault()
     undoDelete()
+  } else if (/^[0-9]$/.test(e.key)) {
+    if (shouldIgnoreHotkeys()) return
+    const albumId = preferencesStore.albumHotkeys[e.key]
+    if (!albumId) {
+      uiStore.toast(`No album configured for key ${e.key}`, 'info', 2000)
+      return
+    }
+    const album = albums.value.find((item) => item.id === albumId)
+    keepPhotoToAlbum(album || { id: albumId, albumName: `Album ${e.key}` })
   }
 }
+
+function shouldIgnoreHotkeys(): boolean {
+  const active = document.activeElement as HTMLElement | null
+  const isTyping = active && ['INPUT', 'TEXTAREA'].includes(active.tagName)
+  return !!isTyping || showAlbumPicker.value
+}
+
+async function ensureAlbumsLoaded() {
+  if (albums.value.length > 0) return
+  try {
+    isLoadingAlbums.value = true
+    albumsError.value = null
+    albums.value = await fetchAlbums()
+  } catch (e) {
+    console.error(e)
+    albumsError.value = e instanceof Error ? e.message : 'Failed to load albums'
+  } finally {
+    isLoadingAlbums.value = false
+  }
+}
+
+async function openAlbumPicker() {
+  await ensureAlbumsLoaded()
+  showAlbumPicker.value = true
+}
+
+function closeAlbumPicker() {
+  showAlbumPicker.value = false
+}
+
+async function handleAlbumSelected(album: ImmichAlbum) {
+  await keepPhotoToAlbum(album)
+  showAlbumPicker.value = false
+}
+
+function handleAssignHotkey(key: string, albumId: string | null) {
+  if (albumId) {
+    preferencesStore.setHotkey(key, albumId)
+  } else {
+    preferencesStore.clearHotkey(key)
+  }
+}
+
+function handleAlbumDragStart() {
+  isAlbumDragActive.value = true
+}
+
+function handleAlbumDragEnd() {
+  isAlbumDragActive.value = false
+}
+
+watch(
+  () => preferencesStore.reviewOrder,
+  async () => {
+    await loadInitialAsset()
+  }
+)
 
 onMounted(() => {
   loadInitialAsset()
@@ -83,6 +168,8 @@ onUnmounted(() => {
               :asset="currentAsset"
               @keep="keepPhoto"
               @delete="deletePhoto"
+              @start-album-drag="handleAlbumDragStart"
+              @end-album-drag="handleAlbumDragEnd"
             />
           </div>
 
@@ -101,9 +188,12 @@ onUnmounted(() => {
           <ActionButtons
             v-if="currentAsset"
             :can-undo="canUndo"
+            :is-album-drag-active="isAlbumDragActive"
             @keep="keepPhoto"
             @delete="deletePhoto"
             @undo="undoDelete"
+            @open-album-picker="openAlbumPicker"
+            @album-drop="openAlbumPicker"
           />
 
           <!-- Instructions -->
@@ -140,11 +230,22 @@ onUnmounted(() => {
               </span>
             </div>
             <p class="hidden sm:flex">
-              (←/→) • Ctrl+Z or ↑ (undo)
+              (←/→) • Ctrl+Z or ↑ (undo) • 0–9 = album hotkeys
             </p>
           </div>
         </div>
       </div>
     </main>
+
+    <AlbumPicker
+      :open="showAlbumPicker"
+      :albums="albums"
+      :loading="isLoadingAlbums"
+      :error="albumsError"
+      :hotkeys="preferencesStore.albumHotkeys"
+      @close="closeAlbumPicker"
+      @select="handleAlbumSelected"
+      @assign-hotkey="handleAssignHotkey"
+    />
   </div>
 </template>
