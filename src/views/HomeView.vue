@@ -185,6 +185,7 @@ onUnmounted(() => {
           <!-- Action buttons -->
           <ActionButtons
             v-if="currentAsset"
+            class="-mx-4 sm:mx-0"
             :can-undo="canUndo"
             :is-favorite="currentAsset?.isFavorite ?? false"
             @keep="keepPhoto"
