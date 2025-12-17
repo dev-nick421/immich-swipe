@@ -119,6 +119,7 @@ function toggleReviewOrder() {
             ? 'Order: Newest first'
             : 'Order: Random'"
       >
+        <span>Order:</span>
         <svg
           v-if="preferencesStore.reviewOrder === 'random'"
           class="w-4 h-4"

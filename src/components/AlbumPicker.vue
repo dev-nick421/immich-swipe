@@ -83,34 +83,28 @@ watch(
     <div
       v-if="open"
       class="fixed inset-0 z-30 flex items-end sm:items-center justify-center bg-black/60 px-4"
+      style="padding-bottom: env(safe-area-inset-bottom);"
       @click="emit('close')"
     >
-      <div
-        class="w-full max-w-3xl bg-white dark:bg-gray-900 rounded-t-2xl sm:rounded-2xl shadow-2xl overflow-hidden"
-        @click.stop
-      >
+      <transition name="sheet">
+        <div
+          v-if="open"
+          class="w-full max-w-3xl bg-white dark:bg-gray-900 rounded-t-2xl sm:rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[95vh] max-h-[95dvh] min-h-[85vh] min-h-[85dvh] sm:max-h-none sm:min-h-0"
+          @click.stop
+        >
         <div
           class="flex items-center justify-between px-4 py-3 border-b border-gray-200 dark:border-gray-800"
           @touchstart="handleTouchStart"
           @touchmove="handleTouchMove"
           @touchend="handleTouchEnd"
         >
-          <div>
+          <div class="flex flex-col leading-tight">
             <p class="text-sm text-gray-500 dark:text-gray-400">Add to album</p>
             <h2 class="text-xl font-semibold text-gray-900 dark:text-gray-50">Choose an album</h2>
           </div>
-          <button
-            class="p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-800"
-            @click="emit('close')"
-            aria-label="Close album picker"
-          >
-            <svg class="w-5 h-5 text-gray-600 dark:text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
-            </svg>
-          </button>
         </div>
 
-        <div class="px-4 py-3 flex flex-col gap-4">
+        <div class="px-4 py-3 safe-area-bottom flex flex-col gap-4 flex-1 min-h-0">
           <div class="flex flex-col sm:flex-row gap-3">
             <input
               v-model="search"
@@ -118,7 +112,7 @@ watch(
               placeholder="Search album"
               class="flex-1 px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
-            <div class="text-sm text-gray-500 dark:text-gray-400 flex items-center">
+            <div class="hidden sm:flex text-sm text-gray-500 dark:text-gray-400 items-center">
               0–9 Hotkeys configurable below
             </div>
           </div>
@@ -131,7 +125,7 @@ watch(
             {{ error }}
           </div>
 
-          <div v-else class="grid sm:grid-cols-2 gap-3 max-h-[340px] overflow-y-auto pr-1">
+          <div v-else class="grid sm:grid-cols-2 gap-3 flex-1 min-h-0 overflow-y-auto pr-1 sm:max-h-[340px] sm:flex-none">
             <div
               v-for="album in filteredAlbums"
               :key="album.id"
@@ -155,7 +149,7 @@ watch(
             </p>
           </div>
 
-          <div class="border-t border-gray-200 dark:border-gray-800 pt-4">
+          <div class="hidden sm:block border-t border-gray-200 dark:border-gray-800 pt-4">
             <p class="text-sm font-semibold text-gray-800 dark:text-gray-100 mb-3">Hotkey mapping</p>
             <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div
@@ -183,8 +177,20 @@ watch(
               </div>
             </div>
           </div>
+          <div class="pt-2">
+            <button
+              class="w-full h-10 rounded-lg text-sm font-semibold transition-colors"
+              :class="[
+                'bg-blue-600 text-white hover:bg-blue-700'
+              ]"
+              @click="emit('close')"
+            >
+              Close
+            </button>
+          </div>
         </div>
       </div>
+      </transition>
     </div>
   </transition>
 </template>
@@ -196,6 +202,16 @@ watch(
 }
 .fade-enter-from,
 .fade-leave-to {
+  opacity: 0;
+}
+
+.sheet-enter-active,
+.sheet-leave-active {
+  transition: transform 0.3s ease, opacity 0.2s ease;
+}
+.sheet-enter-from,
+.sheet-leave-to {
+  transform: translateY(100%);
   opacity: 0;
 }
 </style>

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, onUnmounted, computed, ref, watch } from 'vue'
+import { onMounted, onUnmounted, ref, watch } from 'vue'
 import { useImmich } from '@/composables/useImmich'
 import { useUiStore } from '@/stores/ui'
 import { usePreferencesStore } from '@/stores/preferences'
@@ -11,19 +11,18 @@ import AlbumPicker from '@/components/AlbumPicker.vue'
 
 const {
   currentAsset,
-  lastDeletedAsset,
   error,
   loadInitialAsset,
   keepPhoto,
   keepPhotoToAlbum,
   deletePhoto,
-  undoDelete,
+  undoLastAction,
   fetchAlbums,
+  canUndo,
 } = useImmich()
 const uiStore = useUiStore()
 const preferencesStore = usePreferencesStore()
 
-const canUndo = computed(() => lastDeletedAsset.value !== null)
 const showAlbumPicker = ref(false)
 const isLoadingAlbums = ref(false)
 const albumsError = ref<string | null>(null)
@@ -31,6 +30,17 @@ const albums = ref<ImmichAlbum[]>([])
 
 // Keyboard navigation
 function handleKeydown(e: KeyboardEvent) {
+  if (e.key === 'ArrowUp') {
+    e.preventDefault()
+    undoLastAction()
+    return
+  }
+  if ((e.ctrlKey || e.metaKey) && e.key === 'z') {
+    e.preventDefault()
+    undoLastAction()
+    return
+  }
+
   if (!currentAsset.value) return
 
   if (e.key === 'ArrowRight') {
@@ -39,12 +49,6 @@ function handleKeydown(e: KeyboardEvent) {
   } else if (e.key === 'ArrowLeft') {
     e.preventDefault()
     deletePhoto()
-  } else if (e.key === 'ArrowUp') {
-    e.preventDefault()
-    undoDelete()
-  } else if ((e.ctrlKey || e.metaKey) && e.key === 'z') {
-    e.preventDefault()
-    undoDelete()
   } else if (/^[0-9]$/.test(e.key)) {
     if (shouldIgnoreHotkeys()) return
     const albumId = preferencesStore.albumHotkeys[e.key]
@@ -179,7 +183,7 @@ onUnmounted(() => {
             :can-undo="canUndo"
             @keep="keepPhoto"
             @delete="deletePhoto"
-            @undo="undoDelete"
+            @undo="undoLastAction"
             @open-album-picker="openAlbumPicker"
             @album-drop="openAlbumPicker"
           />
@@ -218,7 +222,7 @@ onUnmounted(() => {
               </span>
             </div>
             <p class="hidden sm:flex">
-              (←/→) • Ctrl+Z or ↑ (undo) • 0–9 = album hotkeys
+              (←/→) • Ctrl+Z or ↑ (back) • 0–9 = album hotkeys
             </p>
           </div>
         </div>

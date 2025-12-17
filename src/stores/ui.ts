@@ -69,6 +69,12 @@ export const useUiStore = defineStore('ui', () => {
     keptCount.value++
   }
 
+  function decrementKept() {
+    if (keptCount.value > 0) {
+      keptCount.value--
+    }
+  }
+
   function incrementDeleted() {
     deletedCount.value++
   }
@@ -97,6 +103,7 @@ export const useUiStore = defineStore('ui', () => {
     keptCount,
     deletedCount,
     incrementKept,
+    decrementKept,
     incrementDeleted,
     decrementDeleted,
     resetStats,

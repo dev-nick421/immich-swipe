@@ -92,8 +92,8 @@ function handleAlbumDrop(e: DragEvent) {
           ? 'bg-gray-800 hover:bg-yellow-600 text-white disabled:hover:bg-gray-800'
           : 'bg-white hover:bg-yellow-500 hover:text-white text-yellow-600 border border-yellow-200 disabled:hover:bg-white disabled:hover:text-yellow-600'
       ]"
-      aria-label="Undo last deletion"
-      :title="canUndo ? 'Undo last deletion' : 'Nothing to undo'"
+      aria-label="Undo last action"
+      :title="canUndo ? 'Undo last action' : 'Nothing to undo'"
     >
       <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h10a5 5 0 015 5v2M3 10l6 6M3 10l6-6" />

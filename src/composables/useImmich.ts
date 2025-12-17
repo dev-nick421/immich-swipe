@@ -1,4 +1,4 @@
-import { ref, watch } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { useAuthStore } from '@/stores/auth'
 import { useUiStore } from '@/stores/ui'
 import { usePreferencesStore } from '@/stores/preferences'
@@ -16,7 +16,7 @@ export function useImmich() {
 
   const currentAsset = ref<ImmichAsset | null>(null)
   const nextAsset = ref<ImmichAsset | null>(null)
-  const lastDeletedAsset = ref<ImmichAsset | null>(null)
+  const pendingAssets = ref<ImmichAsset[]>([])
   const error = ref<string | null>(null)
   const SKIP_VIDEOS_BATCH_SIZE = 10
   const SKIP_VIDEOS_MAX_ATTEMPTS = 5
@@ -30,13 +30,22 @@ export function useImmich() {
   const chronologicalHasMore = ref(true)
   const isFetchingChronological = ref(false)
 
+  type ReviewAction = {
+    asset: ImmichAsset
+    type: 'keep' | 'delete' | 'keepToAlbum'
+    albumName?: string
+  }
+
+  const actionHistory = ref<ReviewAction[]>([])
+
   function resetReviewFlow() {
     chronologicalQueue.value = []
     chronologicalSkip.value = 0
     chronologicalPage.value = 1
     chronologicalHasMore.value = true
     nextAsset.value = null
-    lastDeletedAsset.value = null
+    pendingAssets.value = []
+    actionHistory.value = []
   }
 
   watch(
@@ -222,6 +231,10 @@ export function useImmich() {
   }
 
   async function fetchNextAsset(): Promise<ImmichAsset | null> {
+    const pending = pendingAssets.value.shift()
+    if (pending) {
+      return pending
+    }
     if (preferencesStore.reviewOrder !== 'random') {
       return fetchNextChronologicalAsset()
     }
@@ -229,12 +242,14 @@ export function useImmich() {
   }
 
   // Load initial and preload next
-  async function loadInitialAsset(): Promise<void> {
+  async function loadInitialAsset(resetFlow: boolean = true): Promise<void> {
     try {
       uiStore.setLoading(true, 'Loading photo...')
       error.value = null
 
-      resetReviewFlow()
+      if (resetFlow) {
+        resetReviewFlow()
+      }
       currentAsset.value = await fetchNextAsset()
 
       if (currentAsset.value) {
@@ -288,6 +303,14 @@ export function useImmich() {
     }
   }
 
+  function enqueuePendingAsset(asset: ImmichAsset | null): void {
+    if (!asset) return
+    pendingAssets.value = [
+      asset,
+      ...pendingAssets.value.filter((item) => item.id !== asset.id),
+    ]
+  }
+
   // Move to the next asset
   function moveToNextAsset(): void {
     if (nextAsset.value) {
@@ -295,7 +318,7 @@ export function useImmich() {
       nextAsset.value = null
       preloadNextAsset()
     } else {
-      loadInitialAsset()
+      loadInitialAsset(false)
     }
   }
 
@@ -379,6 +402,8 @@ export function useImmich() {
   // Keep
   async function keepPhoto(): Promise<void> {
     if (!currentAsset.value) return
+    const assetToKeep = currentAsset.value
+    actionHistory.value.push({ asset: assetToKeep, type: 'keep' })
     uiStore.incrementKept()
     uiStore.toast('Photo kept ✓', 'success', 1500)
     moveToNextAsset()
@@ -391,6 +416,11 @@ export function useImmich() {
     try {
       await addAssetToAlbum(album.id, assetToKeep.id)
       preferencesStore.setLastUsedAlbumId(album.id)
+      actionHistory.value.push({
+        asset: assetToKeep,
+        type: 'keepToAlbum',
+        albumName: album.albumName,
+      })
       uiStore.incrementKept()
       uiStore.toast(`Added to ${album.albumName}`, 'success', 1800)
       moveToNextAsset()
@@ -408,7 +438,7 @@ export function useImmich() {
     const success = await deleteAsset(assetToDelete.id)
 
     if (success) {
-      lastDeletedAsset.value = assetToDelete
+      actionHistory.value.push({ asset: assetToDelete, type: 'delete' })
       uiStore.incrementDeleted()
       uiStore.toast('Photo deleted', 'info', 1500)
       moveToNextAsset()
@@ -417,44 +447,58 @@ export function useImmich() {
     }
   }
 
-  // Undo last deletion
-  async function undoDelete(): Promise<void> {
-    if (!lastDeletedAsset.value) {
+  // Undo last action (keep/delete/album)
+  async function undoLastAction(): Promise<void> {
+    const lastAction = actionHistory.value.pop()
+    if (!lastAction) {
       uiStore.toast('Nothing to undo', 'info', 1500)
       return
     }
 
-    const assetToRestore = lastDeletedAsset.value
     const assetToResumeAfterUndo = currentAsset.value
-    const success = await restoreAsset(assetToRestore.id)
+    const preloadedAfterResume = nextAsset.value
 
-    if (success) {
+    if (lastAction.type === 'delete') {
+      const success = await restoreAsset(lastAction.asset.id)
+      if (!success) {
+        actionHistory.value.push(lastAction)
+        uiStore.toast('Failed to restore photo', 'error')
+        return
+      }
+
       uiStore.decrementDeleted()
-      uiStore.toast(`${assetToRestore.originalFileName} was restored`, 'success', 2500)
-      lastDeletedAsset.value = null
-
-      setCurrentAssetWithFallback(assetToRestore, assetToResumeAfterUndo)
-    } else {
-      uiStore.toast('Failed to restore photo', 'error')
+      uiStore.toast(`${lastAction.asset.originalFileName} was restored`, 'success', 2500)
+      if (preloadedAfterResume?.id !== assetToResumeAfterUndo?.id) {
+        enqueuePendingAsset(preloadedAfterResume)
+      }
+      setCurrentAssetWithFallback(lastAction.asset, assetToResumeAfterUndo)
+      return
     }
+
+    uiStore.decrementKept()
+    if (lastAction.type === 'keepToAlbum' && lastAction.albumName) {
+      uiStore.toast(`Back to photo (in ${lastAction.albumName})`, 'info', 2000)
+    } else {
+      uiStore.toast('Back to previous photo', 'info', 1500)
+    }
+    if (preloadedAfterResume?.id !== assetToResumeAfterUndo?.id) {
+      enqueuePendingAsset(preloadedAfterResume)
+    }
+    setCurrentAssetWithFallback(lastAction.asset, assetToResumeAfterUndo)
   }
 
-  // Check if undo is available
-  function canUndo(): boolean {
-    return lastDeletedAsset.value !== null
-  }
+  const canUndo = computed(() => actionHistory.value.length > 0)
 
   return {
     currentAsset,
     nextAsset,
-    lastDeletedAsset,
     error,
     testConnection,
     loadInitialAsset,
     keepPhoto,
     keepPhotoToAlbum,
     deletePhoto,
-    undoDelete,
+    undoLastAction,
     canUndo,
     getAssetThumbnailUrl,
     getAssetOriginalUrl,
