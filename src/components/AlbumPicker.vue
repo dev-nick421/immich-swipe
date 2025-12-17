@@ -17,6 +17,8 @@ const emit = defineEmits<{
 }>()
 
 const search = ref('')
+const touchStart = ref<{ x: number; y: number } | null>(null)
+const touchDelta = ref({ x: 0, y: 0 })
 
 const filteredAlbums = computed(() => {
   if (!search.value) return props.albums
@@ -36,6 +38,34 @@ function handleSelect(album: ImmichAlbum) {
 
 function handleHotkeyChange(key: string, value: string) {
   emit('assignHotkey', key, value || null)
+}
+
+function handleTouchStart(event: TouchEvent) {
+  if (event.touches.length !== 1) return
+  const touch = event.touches[0]
+  touchStart.value = { x: touch.clientX, y: touch.clientY }
+  touchDelta.value = { x: 0, y: 0 }
+}
+
+function handleTouchMove(event: TouchEvent) {
+  if (!touchStart.value || event.touches.length !== 1) return
+  const touch = event.touches[0]
+  touchDelta.value = {
+    x: touch.clientX - touchStart.value.x,
+    y: touch.clientY - touchStart.value.y,
+  }
+}
+
+function handleTouchEnd() {
+  if (!touchStart.value) return
+  const { x, y } = touchDelta.value
+  const isSwipeDown = y > 80 && Math.abs(y) > Math.abs(x)
+  const isSwipeRight = x > 80 && Math.abs(x) > Math.abs(y)
+  if (isSwipeDown || isSwipeRight) {
+    emit('close')
+  }
+  touchStart.value = null
+  touchDelta.value = { x: 0, y: 0 }
 }
 
 watch(
@@ -59,7 +89,12 @@ watch(
         class="w-full max-w-3xl bg-white dark:bg-gray-900 rounded-t-2xl sm:rounded-2xl shadow-2xl overflow-hidden"
         @click.stop
       >
-        <div class="flex items-center justify-between px-4 py-3 border-b border-gray-200 dark:border-gray-800">
+        <div
+          class="flex items-center justify-between px-4 py-3 border-b border-gray-200 dark:border-gray-800"
+          @touchstart="handleTouchStart"
+          @touchmove="handleTouchMove"
+          @touchend="handleTouchEnd"
+        >
           <div>
             <p class="text-sm text-gray-500 dark:text-gray-400">Add to album</p>
             <h2 class="text-xl font-semibold text-gray-900 dark:text-gray-50">Choose an album</h2>

@@ -28,7 +28,6 @@ const showAlbumPicker = ref(false)
 const isLoadingAlbums = ref(false)
 const albumsError = ref<string | null>(null)
 const albums = ref<ImmichAlbum[]>([])
-const isAlbumDragActive = ref(false)
 
 // Keyboard navigation
 function handleKeydown(e: KeyboardEvent) {
@@ -100,14 +99,6 @@ function handleAssignHotkey(key: string, albumId: string | null) {
   }
 }
 
-function handleAlbumDragStart() {
-  isAlbumDragActive.value = true
-}
-
-function handleAlbumDragEnd() {
-  isAlbumDragActive.value = false
-}
-
 watch(
   () => preferencesStore.reviewOrder,
   async () => {
@@ -168,8 +159,6 @@ onUnmounted(() => {
               :asset="currentAsset"
               @keep="keepPhoto"
               @delete="deletePhoto"
-              @start-album-drag="handleAlbumDragStart"
-              @end-album-drag="handleAlbumDragEnd"
             />
           </div>
 
@@ -188,7 +177,6 @@ onUnmounted(() => {
           <ActionButtons
             v-if="currentAsset"
             :can-undo="canUndo"
-            :is-album-drag-active="isAlbumDragActive"
             @keep="keepPhoto"
             @delete="deletePhoto"
             @undo="undoDelete"

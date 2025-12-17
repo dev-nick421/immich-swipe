@@ -12,8 +12,6 @@ const props = defineProps<{
 const emit = defineEmits<{
   keep: []
   delete: []
-  startAlbumDrag: []
-  endAlbumDrag: []
 }>()
 
 const uiStore = useUiStore()
@@ -188,18 +186,6 @@ onBeforeUnmount(() => {
   cleanupAllMedia()
 })
 
-function handleAlbumDragStart(event: DragEvent) {
-  emit('startAlbumDrag')
-  if (event.dataTransfer) {
-    event.dataTransfer.setData('text/plain', props.asset.id)
-    event.dataTransfer.effectAllowed = 'move'
-  }
-}
-
-function handleAlbumDragEnd() {
-  emit('endAlbumDrag')
-}
-
 // obvious things are obvious
 const formattedDate = computed(() => {
   const date = new Date(props.asset.localDateTime || props.asset.fileCreatedAt)
@@ -293,15 +279,6 @@ const formattedDate = computed(() => {
           <p class="text-white text-sm truncate">{{ asset.originalFileName }}</p>
           <p class="text-white/70 text-xs">{{ formattedDate }}</p>
         </div>
-        <button
-          class="px-3 py-1 rounded-full text-xs font-semibold bg-blue-600 text-white hover:bg-blue-500 transition-colors"
-          draggable="true"
-          @dragstart="handleAlbumDragStart"
-          @dragend="handleAlbumDragEnd"
-          title="Drag to album button"
-        >
-          Drag to album
-        </button>
       </div>
     </div>
   </div>
