@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, watch, onBeforeUnmount, nextTick, onMounted } from 'vue'
+import { ref, computed, watch, onBeforeUnmount, nextTick } from 'vue'
 import { useSwipe } from '@/composables/useSwipe'
 import { useUiStore } from '@/stores/ui'
 import { useAuthStore } from '@/stores/auth'
@@ -26,7 +26,6 @@ const videoError = ref(false)
 const videoLoading = ref(false)
 const videoRef = ref<HTMLVideoElement | null>(null)
 const videoAbortController = ref<AbortController | null>(null)
-const autoplayMuted = ref(false)
 let autoplayCleanup: (() => void) | null = null
 const assetApiBaseUrl = computed(() => {
   if (!authStore.immichBaseUrl) return ''
@@ -89,15 +88,6 @@ function cleanupAutoplay() {
   if (autoplayCleanup) {
     autoplayCleanup()
     autoplayCleanup = null
-  }
-}
-
-function setVideoMuted(video: HTMLVideoElement, muted: boolean) {
-  video.muted = muted
-  if (muted) {
-    video.setAttribute('muted', '')
-  } else {
-    video.removeAttribute('muted')
   }
 }
 
@@ -182,7 +172,6 @@ function cleanupVideo() {
   }
   videoError.value = false
   videoLoading.value = false
-  autoplayMuted.value = true
 }
 
 async function fetchVideo() {
@@ -244,58 +233,25 @@ watch([videoBlobUrl, () => videoRef.value], async ([newUrl, video]) => {
   await nextTick()
   if (videoRef.value !== video || videoBlobUrl.value !== newUrl) return
   configureInlinePlayback(video)
-  autoplayMuted.value = true
-  setVideoMuted(video, true)
+  video.muted = true
+  video.defaultMuted = true
 
   const attemptAutoplay = () => {
     if (videoRef.value !== video || videoBlobUrl.value !== newUrl) return
-    setVideoMuted(video, true)
-    autoplayMuted.value = true
     void video.play().catch(() => {
       // Autoplay can be blocked; controls remain available.
     })
   }
 
   const onReady = () => attemptAutoplay()
-  video.addEventListener('loadeddata', onReady)
-  video.addEventListener('canplay', onReady)
+  video.addEventListener('loadeddata', onReady, { once: true })
+  video.addEventListener('canplay', onReady, { once: true })
   autoplayCleanup = () => {
     video.removeEventListener('loadeddata', onReady)
     video.removeEventListener('canplay', onReady)
   }
 
   attemptAutoplay()
-  requestAnimationFrame(attemptAutoplay)
-})
-
-function handleUserGesture() {
-  const video = videoRef.value
-  if (!video || !isVideo.value) return
-  if (!autoplayMuted.value) return
-  autoplayMuted.value = false
-  setVideoMuted(video, false)
-  video.volume = 1
-  void video.play().catch(() => {
-    // Ignore play errors; user can use controls.
-  })
-}
-
-function removeUserGestureListeners() {
-  if (typeof window === 'undefined') return
-  window.removeEventListener('pointerdown', handleUserGesture)
-  window.removeEventListener('touchstart', handleUserGesture)
-  window.removeEventListener('keydown', handleUserGesture)
-}
-
-onMounted(() => {
-  if (typeof window === 'undefined') return
-  window.addEventListener('pointerdown', handleUserGesture)
-  window.addEventListener('touchstart', handleUserGesture)
-  window.addEventListener('keydown', handleUserGesture)
-})
-
-onBeforeUnmount(() => {
-  removeUserGestureListeners()
 })
 
 onBeforeUnmount(() => {
@@ -318,8 +274,6 @@ const formattedDate = computed(() => {
     ref="cardRef"
     class="relative w-full h-full flex items-center justify-center select-none cursor-grab active:cursor-grabbing"
     :style="cardStyle"
-    @pointerdown="handleUserGesture"
-    @touchstart="handleUserGesture"
   >
     <!-- Image container -->
     <div class="relative w-full h-full flex items-center justify-center overflow-hidden rounded-2xl">
@@ -363,8 +317,6 @@ const formattedDate = computed(() => {
         class="w-full h-full object-contain"
         playsinline
         webkit-playsinline
-        autoplay
-        :muted="autoplayMuted"
         loop
         controls
       />
