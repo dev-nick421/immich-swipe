@@ -154,7 +154,7 @@ export function useImmich() {
 
   async function fetchChronologicalBatch(): Promise<{ items: ImmichAsset[]; hasMore: boolean; nextPage: number | null }> {
     const order = preferencesStore.reviewOrder === 'chronological-desc' ? 'desc' : 'asc'
-    const usePagePagination = chronologicalPagingMode.value === 'page'
+    const usePagePagination = chronologicalPagingMode.value !== 'skip'
     const body: MetadataSearchRequest = {
       order,
       assetType: ['IMAGE', 'VIDEO'],
@@ -167,13 +167,38 @@ export function useImmich() {
       body.skip = chronologicalSkip.value
     }
 
-    const response = await apiRequest<MetadataSearchResponse | ImmichAsset[]>('/search/metadata', {
-      method: 'POST',
-      body: JSON.stringify(body),
-    })
+    let response: MetadataSearchResponse | ImmichAsset[]
+    try {
+      response = await apiRequest<MetadataSearchResponse | ImmichAsset[]>('/search/metadata', {
+        method: 'POST',
+        body: JSON.stringify(body),
+      })
+    } catch (e) {
+      if (!usePagePagination || chronologicalPagingMode.value === 'skip') {
+        throw e
+      }
+
+      chronologicalPagingMode.value = 'skip'
+      chronologicalPage.value = null
+      const fallbackBody: MetadataSearchRequest = {
+        order,
+        assetType: ['IMAGE', 'VIDEO'],
+        take: CHRONO_PAGE_SIZE,
+        skip: chronologicalSkip.value,
+      }
+      response = await apiRequest<MetadataSearchResponse | ImmichAsset[]>('/search/metadata', {
+        method: 'POST',
+        body: JSON.stringify(fallbackBody),
+      })
+    }
 
     if (chronologicalPagingMode.value === null) {
-      if (!Array.isArray(response) && (response?.nextPage !== undefined || response?.hasNextPage !== undefined)) {
+      if (Array.isArray(response)) {
+        chronologicalPagingMode.value = 'skip'
+        chronologicalPage.value = null
+      } else if (response?.nextPage !== undefined || response?.hasNextPage !== undefined) {
+        chronologicalPagingMode.value = 'page'
+      } else if (usePagePagination) {
         chronologicalPagingMode.value = 'page'
       } else {
         chronologicalPagingMode.value = 'skip'
@@ -181,28 +206,28 @@ export function useImmich() {
       }
     }
 
-    if (Array.isArray(response)) {
-      return { items: response, hasMore: response.length === CHRONO_PAGE_SIZE, nextPage: null }
+    const items = Array.isArray(response)
+      ? response
+      : response?.assets?.items ?? response?.items ?? []
+
+    let hasMore = items.length === CHRONO_PAGE_SIZE
+    let nextPage: number | null = null
+
+    if (!Array.isArray(response)) {
+      if (typeof response.hasNextPage === 'boolean') {
+        hasMore = response.hasNextPage
+      } else if (response?.nextPage !== undefined && response?.nextPage !== null) {
+        hasMore = true
+        const parsedNext = Number(response.nextPage)
+        nextPage = Number.isNaN(parsedNext) ? null : parsedNext
+      } else if (typeof response.assets?.total === 'number' && typeof response.assets?.count === 'number') {
+        if (response.assets.total > response.assets.count) {
+          hasMore = true
+        }
+      }
     }
 
-    if (response?.assets?.items) {
-      const items = response.assets.items
-      const nextPage = response.nextPage
-      if (nextPage !== null && nextPage !== undefined) {
-        return { items, hasMore: true, nextPage: Number(nextPage) }
-      }
-      if (typeof response.assets.total === 'number' && typeof response.assets.count === 'number') {
-        return { items, hasMore: response.assets.total > response.assets.count, nextPage: null }
-      }
-      return { items, hasMore: items.length === CHRONO_PAGE_SIZE, nextPage: null }
-    }
-
-    const items = response?.items ?? []
-    return {
-      items,
-      hasMore: response?.hasNextPage ?? (items.length === CHRONO_PAGE_SIZE),
-      nextPage: null,
-    }
+    return { items, hasMore, nextPage }
   }
 
   async function fetchNextChronologicalAsset(): Promise<ImmichAsset | null> {
@@ -223,7 +248,7 @@ export function useImmich() {
 
     try {
       const batch = await fetchChronologicalBatch()
-      if (chronologicalPagingMode.value !== 'page') {
+      if (chronologicalPagingMode.value === 'skip') {
         chronologicalSkip.value += batch.items.length
       }
       chronologicalHasMore.value = batch.hasMore
