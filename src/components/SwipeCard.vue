@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, watch, onBeforeUnmount } from 'vue'
+import { ref, computed, watch, onBeforeUnmount, nextTick, onMounted } from 'vue'
 import { useSwipe } from '@/composables/useSwipe'
 import { useUiStore } from '@/stores/ui'
 import { useAuthStore } from '@/stores/auth'
@@ -26,6 +26,23 @@ const videoError = ref(false)
 const videoLoading = ref(false)
 const videoRef = ref<HTMLVideoElement | null>(null)
 const videoAbortController = ref<AbortController | null>(null)
+const hasUserGesture = ref(false)
+const assetApiBaseUrl = computed(() => {
+  if (!authStore.immichBaseUrl) return ''
+  return `${authStore.immichBaseUrl}${authStore.proxyBaseUrl}`
+})
+const assetPageUrl = computed(() => {
+  if (!authStore.immichBaseUrl) return ''
+  try {
+    const base = authStore.immichBaseUrl.endsWith('/')
+      ? authStore.immichBaseUrl
+      : `${authStore.immichBaseUrl}/`
+    return new URL(`photos/${encodeURIComponent(props.asset.id)}`, base).toString()
+  } catch {
+    return ''
+  }
+})
+const canOpenInImmich = computed(() => assetPageUrl.value.length > 0)
 
 // composable
 const { isSwiping, swipeOffset, swipeDirection } = useSwipe(cardRef, {
@@ -67,6 +84,35 @@ const deleteIndicatorOpacity = computed(() => {
 
 const isVideo = computed(() => props.asset.type === 'VIDEO')
 
+function buildAssetApiUrl(path: string): string {
+  if (!assetApiBaseUrl.value) {
+    throw new Error('Immich server URL missing')
+  }
+  const normalizedPath = path.startsWith('/') ? path.slice(1) : path
+  return `${assetApiBaseUrl.value}/assets/${props.asset.id}/${normalizedPath}`
+}
+
+function getAuthHeaders(): Record<string, string> {
+  return {
+    'x-api-key': authStore.apiKey,
+    'X-Target-Host': authStore.immichBaseUrl,
+  }
+}
+
+function openInImmich() {
+  const url = assetPageUrl.value
+  if (!url) return
+  const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent)
+  if (isMobile) {
+    window.location.assign(url)
+    return
+  }
+  const opened = window.open(url, '_blank', 'noopener')
+  if (!opened) {
+    window.location.assign(url)
+  }
+}
+
 // Fetch image with auth headers
 async function fetchImage() {
   imageLoaded.value = false
@@ -79,15 +125,9 @@ async function fetchImage() {
   }
 
   try {
-    if (!authStore.immichBaseUrl) {
-      throw new Error('Immich server URL missing')
-    }
-    const url = `${authStore.immichBaseUrl}${authStore.proxyBaseUrl}/assets/${props.asset.id}/thumbnail?size=preview`
+    const url = buildAssetApiUrl('thumbnail?size=preview')
     const response = await fetch(url, {
-      headers: {
-        'x-api-key': authStore.apiKey,
-        'X-Target-Host': authStore.immichBaseUrl,
-      },
+      headers: getAuthHeaders(),
     })
 
     if (!response.ok) {
@@ -127,22 +167,13 @@ async function fetchVideo() {
   videoLoading.value = true
   videoError.value = false
 
-  if (!authStore.immichBaseUrl) {
-    videoError.value = true
-    videoLoading.value = false
-    return
-  }
-
   const controller = new AbortController()
   videoAbortController.value = controller
 
   try {
-    const url = `${authStore.immichBaseUrl}${authStore.proxyBaseUrl}/assets/${props.asset.id}/original`
+    const url = buildAssetApiUrl('original')
     const response = await fetch(url, {
-      headers: {
-        'x-api-key': authStore.apiKey,
-        'X-Target-Host': authStore.immichBaseUrl,
-      },
+      headers: getAuthHeaders(),
       signal: controller.signal,
     })
 
@@ -182,6 +213,48 @@ watch(() => props.asset.id, () => {
   }
 }, { immediate: true })
 
+watch(videoBlobUrl, async (newUrl) => {
+  if (!newUrl || !isVideo.value) return
+  await nextTick()
+  const video = videoRef.value
+  if (!video) return
+  video.muted = !hasUserGesture.value
+  try {
+    await video.play()
+  } catch {
+    // Autoplay can be blocked; controls remain available.
+  }
+})
+
+function handleUserGesture() {
+  if (hasUserGesture.value) return
+  hasUserGesture.value = true
+  const video = videoRef.value
+  if (!video) return
+  video.muted = false
+  video.volume = 1
+  void video.play()
+  removeUserGestureListeners()
+}
+
+function removeUserGestureListeners() {
+  if (typeof window === 'undefined') return
+  window.removeEventListener('pointerdown', handleUserGesture)
+  window.removeEventListener('touchstart', handleUserGesture)
+  window.removeEventListener('keydown', handleUserGesture)
+}
+
+onMounted(() => {
+  if (typeof window === 'undefined') return
+  window.addEventListener('pointerdown', handleUserGesture, { once: true })
+  window.addEventListener('touchstart', handleUserGesture, { once: true })
+  window.addEventListener('keydown', handleUserGesture, { once: true })
+})
+
+onBeforeUnmount(() => {
+  removeUserGestureListeners()
+})
+
 onBeforeUnmount(() => {
   cleanupAllMedia()
 })
@@ -202,6 +275,8 @@ const formattedDate = computed(() => {
     ref="cardRef"
     class="relative w-full h-full flex items-center justify-center select-none cursor-grab active:cursor-grabbing"
     :style="cardStyle"
+    @pointerdown="handleUserGesture"
+    @touchstart="handleUserGesture"
   >
     <!-- Image container -->
     <div class="relative w-full h-full flex items-center justify-center overflow-hidden rounded-2xl">
@@ -245,9 +320,27 @@ const formattedDate = computed(() => {
         class="w-full h-full object-contain"
         playsinline
         autoplay
+        :muted="!hasUserGesture"
         loop
         controls
       />
+
+      <!-- Open in Immich -->
+      <button
+        type="button"
+        class="absolute top-3 right-3 z-20 inline-flex items-center justify-center w-10 h-10 rounded-full bg-black/40 text-white shadow-lg backdrop-blur-sm transition hover:bg-black/60 active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/80 cursor-pointer disabled:cursor-not-allowed disabled:opacity-40"
+        :disabled="!canOpenInImmich"
+        aria-label="Open in Immich"
+        title="Open in Immich"
+        @click.stop="openInImmich"
+        @pointerdown.stop
+        @touchstart.stop
+        @mousedown.stop
+      >
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 17L17 7M10 7h7v7" />
+        </svg>
+      </button>
 
       <!-- KEEP (right swipe) -->
       <div

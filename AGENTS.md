@@ -72,7 +72,7 @@
   - `src/types/immich.ts` (API-Typen)
 - UI/Interaktion:
   - `src/views/HomeView.vue` (Hauptscreen, Keyboard: ←/→ Keep/Delete, ↑ oder Ctrl/⌘+Z = Undo)
-  - `src/components/SwipeCard.vue` (lädt Thumbnail/Video-Original als Blob mit Headern; Videos als `<video autoplay loop controls>`)
+  - `src/components/SwipeCard.vue` (lädt Thumbnail/Video-Original als Blob mit Headern; Videos als `<video autoplay loop controls>`; Overlay-Button öffnet Asset-Detail in Immich `/photos/<id>`)
   - `src/components/ActionButtons.vue` (Undo-Button; Keep/Delete Buttons nur Desktop)
   - `src/composables/useSwipe.ts` (Touch+Mouse Swipe-Erkennung)
   - `src/stores/ui.ts` + `src/components/LoadingOverlay.vue` + `src/components/ToastNotification.vue`
