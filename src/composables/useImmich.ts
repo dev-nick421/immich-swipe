@@ -31,6 +31,7 @@ export function useImmich() {
   const chronologicalQueue = ref<ImmichAsset[]>([])
   const chronologicalSkip = ref(0)
   const chronologicalPage = ref<number | null>(1)
+  const chronologicalPagingMode = ref<'skip' | 'page' | null>(null)
   const chronologicalHasMore = ref(true)
   const isFetchingChronological = ref(false)
 
@@ -52,6 +53,7 @@ export function useImmich() {
     chronologicalQueue.value = []
     chronologicalSkip.value = 0
     chronologicalPage.value = 1
+    chronologicalPagingMode.value = null
     chronologicalHasMore.value = true
     nextAsset.value = null
     pendingAssets.value = []
@@ -152,21 +154,32 @@ export function useImmich() {
 
   async function fetchChronologicalBatch(): Promise<{ items: ImmichAsset[]; hasMore: boolean; nextPage: number | null }> {
     const order = preferencesStore.reviewOrder === 'chronological-desc' ? 'desc' : 'asc'
+    const usePagePagination = chronologicalPagingMode.value === 'page'
     const body: MetadataSearchRequest = {
-      take: CHRONO_PAGE_SIZE,
-      size: CHRONO_PAGE_SIZE,
-      skip: chronologicalSkip.value,
       order,
       assetType: ['IMAGE', 'VIDEO'],
     }
-    if (chronologicalPage.value !== null) {
+    if (usePagePagination && chronologicalPage.value !== null) {
       body.page = chronologicalPage.value
+      body.size = CHRONO_PAGE_SIZE
+    } else {
+      body.take = CHRONO_PAGE_SIZE
+      body.skip = chronologicalSkip.value
     }
 
     const response = await apiRequest<MetadataSearchResponse | ImmichAsset[]>('/search/metadata', {
       method: 'POST',
       body: JSON.stringify(body),
     })
+
+    if (chronologicalPagingMode.value === null) {
+      if (!Array.isArray(response) && (response?.nextPage !== undefined || response?.hasNextPage !== undefined)) {
+        chronologicalPagingMode.value = 'page'
+      } else {
+        chronologicalPagingMode.value = 'skip'
+        chronologicalPage.value = null
+      }
+    }
 
     if (Array.isArray(response)) {
       return { items: response, hasMore: response.length === CHRONO_PAGE_SIZE, nextPage: null }
@@ -210,7 +223,9 @@ export function useImmich() {
 
     try {
       const batch = await fetchChronologicalBatch()
-      chronologicalSkip.value += batch.items.length
+      if (chronologicalPagingMode.value !== 'page') {
+        chronologicalSkip.value += batch.items.length
+      }
       chronologicalHasMore.value = batch.hasMore
       if (batch.nextPage !== null && !Number.isNaN(batch.nextPage)) {
         chronologicalPage.value = batch.nextPage

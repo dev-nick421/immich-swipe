@@ -88,6 +88,27 @@ export const useReviewedStore = defineStore('reviewed', () => {
     persist()
   }
 
+  function resetReviewed() {
+    const user = authStore.currentUserName || 'default-user'
+    const prefix = `${STORAGE_PREFIX}:`
+    const keysToRemove: string[] = []
+
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i)
+      if (!key || !key.startsWith(prefix)) continue
+      if (key.endsWith(`:${user}`)) {
+        keysToRemove.push(key)
+      }
+    }
+
+    if (keysToRemove.length === 0) {
+      localStorage.removeItem(storageKey.value)
+    } else {
+      keysToRemove.forEach((key) => localStorage.removeItem(key))
+    }
+    loadFromStorage()
+  }
+
   watch(storageKey, () => loadFromStorage(), { immediate: true })
 
   return {
@@ -95,5 +116,6 @@ export const useReviewedStore = defineStore('reviewed', () => {
     getDecision,
     markReviewed,
     unmarkReviewed,
+    resetReviewed,
   }
 })

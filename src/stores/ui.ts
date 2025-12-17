@@ -85,8 +85,11 @@ export const useUiStore = defineStore('ui', () => {
 
     try {
       const parsed = JSON.parse(raw) as { keptCount?: number; deletedCount?: number }
-      keptCount.value = Number.isFinite(parsed.keptCount) ? parsed.keptCount : 0
-      deletedCount.value = Number.isFinite(parsed.deletedCount) ? parsed.deletedCount : 0
+      const kept = typeof parsed.keptCount === 'number' && Number.isFinite(parsed.keptCount) ? parsed.keptCount : 0
+      const deleted =
+        typeof parsed.deletedCount === 'number' && Number.isFinite(parsed.deletedCount) ? parsed.deletedCount : 0
+      keptCount.value = kept
+      deletedCount.value = deleted
     } catch (e) {
       console.error('Failed to parse stats from localStorage', e)
       keptCount.value = 0

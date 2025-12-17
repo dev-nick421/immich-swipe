@@ -25,7 +25,7 @@ function handleAlbumDrop(e: DragEvent) {
 </script>
 
 <template>
-  <div class="flex w-full items-center justify-center gap-2 sm:gap-4 px-0 sm:px-4 py-4">
+  <div class="flex w-full items-center justify-center gap-2 sm:gap-4 px-0 sm:px-4 py-4 lg:max-w-4xl lg:mx-auto">
     <!-- Album -->
     <button
       @click="emit('openAlbumPicker')"

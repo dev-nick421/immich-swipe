@@ -68,8 +68,8 @@ export interface AddAssetsToAlbumRequest {
 }
 
 export interface MetadataSearchRequest {
-  take: number
-  skip: number
+  take?: number
+  skip?: number
   page?: number
   size?: number
   order?: 'asc' | 'desc'
