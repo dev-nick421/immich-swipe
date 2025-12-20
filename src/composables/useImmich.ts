@@ -391,7 +391,24 @@ export function useImmich() {
       return albumsCache.value
     }
 
-    const albums = await apiRequest<ImmichAlbum[]>('/albums')
+    // Fetch owned + shared albums
+    const [ownedAlbums, sharedAlbums] = await Promise.all([
+      apiRequest<ImmichAlbum[]>('/albums'),
+      apiRequest<ImmichAlbum[]>('/albums?shared=true'),
+    ])
+
+    // Merge & deduplicate (by id)
+    const albumMap = new Map<string, ImmichAlbum>()
+    for (const album of ownedAlbums) {
+      albumMap.set(album.id, album)
+    }
+    for (const album of sharedAlbums) {
+      if (!albumMap.has(album.id)) {
+        albumMap.set(album.id, album)
+      }
+    }
+
+    const albums = Array.from(albumMap.values())
     albumsCache.value = albums
     return albums
   }
