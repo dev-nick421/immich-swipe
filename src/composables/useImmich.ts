@@ -77,7 +77,7 @@ export function useImmich() {
     if (target.origin === window.location.origin) {
       return `Could not reach the built-in Immich proxy at ${target.origin}.`
     }
-    return `Could not reach Immich at ${target.origin}. Check the server URL and that Immich (or its reverse proxy) allows CORS requests from ${window.location.origin}, or set IMMICH_URL on the Docker container to use the built-in proxy.`
+    return `Could not reach Immich at ${target.origin}. Check the server URL and that Immich (or its reverse proxy) allows CORS requests from ${window.location.origin}, or use the built-in proxy of the Docker image (see README).`
   }
 
   function describeHttpError(response: Response, errorText: string): string {
@@ -101,7 +101,7 @@ export function useImmich() {
     }
 
     if (authStore.useBuiltInProxy && [502, 503, 504].includes(response.status)) {
-      return `The built-in proxy could not reach Immich (HTTP ${response.status}). Check IMMICH_URL and the container logs.`
+      return `The built-in proxy could not reach Immich (HTTP ${response.status}). Check the container logs; set IMMICH_URL if the container needs another address to reach Immich.`
     }
     if (response.status === 404) {
       return `API error: 404 - ${response.url || 'endpoint'} not found. Does the server URL point to Immich?`

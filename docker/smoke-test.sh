@@ -6,9 +6,12 @@ set -eu
 IMAGE=${1:?usage: $0 <image>}
 NAME=immich-swipe-smoke-$$
 STUB_DIR=$(mktemp -d)
+CONTAINERS="immich"
 
 cleanup() {
-  docker rm -f "$NAME-immich" "$NAME-proxy" "$NAME-direct" >/dev/null 2>&1 || true
+  for c in $CONTAINERS; do
+    docker rm -f "$NAME-$c" >/dev/null 2>&1 || true
+  done
   docker network rm "$NAME" >/dev/null 2>&1 || true
   rm -rf "$STUB_DIR"
 }
@@ -17,16 +20,24 @@ trap 'exit 130' INT TERM HUP
 
 fail() {
   echo "FAIL: $*"
-  for c in "$NAME-proxy" "$NAME-direct"; do
-    echo "--- logs of $c"
-    docker logs "$c" 2>&1 | tail -20 || true
+  for c in $CONTAINERS; do
+    echo "--- logs of $NAME-$c"
+    docker logs "$NAME-$c" 2>&1 | tail -10 || true
   done
   exit 1
 }
 
+# start <suffix> [docker run args...]: start the image on the test network
+start() {
+  suffix=$1
+  shift
+  CONTAINERS="$CONTAINERS $suffix"
+  docker run -d --name "$NAME-$suffix" --network "$NAME" "$@" "$IMAGE" >/dev/null
+}
+
 # GET a path from inside a container (works without published ports / on Docker Desktop)
 get() {
-  docker exec "$1" wget -qO- --header "x-api-key: smoke-key" "http://127.0.0.1$2"
+  docker exec "$NAME-$1" wget -qO- --header "x-api-key: smoke-key" "http://127.0.0.1$2"
 }
 
 wait_ready() {
@@ -36,6 +47,20 @@ wait_ready() {
     [ "$i" -lt 30 ] || fail "$1 did not become ready"
     sleep 1
   done
+}
+
+expect_proxied() {
+  get "$1" /config.js | grep -q 'proxy: true' || fail "$1: config.js does not enable the proxy"
+  response=$(get "$1" '/api/server/ping?x=1') || fail "$1: proxy request failed"
+  echo "$response" | grep -q '"uri":"/api/server/ping?x=1"' || fail "$1: unexpected upstream path: $response"
+  echo "$response" | grep -q '"key":"smoke-key"' || fail "$1: x-api-key not forwarded: $response"
+}
+
+expect_direct() {
+  get "$1" /config.js | grep -q 'proxy: false' || fail "$1: config.js should disable the proxy"
+  if get "$1" /api/server/ping >/dev/null 2>&1; then
+    fail "$1: /api/ must not be served without the proxy"
+  fi
 }
 
 # Stub Immich: echoes path and API key as JSON
@@ -53,28 +78,42 @@ chmod 644 "$STUB_DIR/default.conf"
 docker network create "$NAME" >/dev/null
 docker run -d --name "$NAME-immich" --network "$NAME" --network-alias immich-server \
   -v "$STUB_DIR/default.conf:/etc/nginx/conf.d/default.conf:ro" nginx:alpine >/dev/null
-docker run -d --name "$NAME-proxy" --network "$NAME" -e IMMICH_URL=http://immich-server:2283/ "$IMAGE" >/dev/null
-docker run -d --name "$NAME-direct" --network "$NAME" "$IMAGE" >/dev/null
-wait_ready "$NAME-proxy"
-wait_ready "$NAME-direct"
 
-echo "== IMMICH_URL set"
-get "$NAME-proxy" /config.js | grep -q 'proxy: true' || fail "config.js does not enable the proxy"
-response=$(get "$NAME-proxy" '/api/server/ping?x=1') || fail "proxy request failed"
-echo "$response" | grep -q '"uri":"/api/server/ping?x=1"' || fail "unexpected upstream path: $response"
-echo "$response" | grep -q '"key":"smoke-key"' || fail "x-api-key not forwarded: $response"
-get "$NAME-proxy" /select-user | grep -q '<div id="app">' || fail "SPA fallback broken"
+# VITE_SERVER_URL is set explicitly everywhere, so a value baked in at build time doesn't interfere
+start from-immich-url -e VITE_SERVER_URL= -e IMMICH_URL=http://immich-server:2283/
+start from-server-url -e VITE_SERVER_URL=http://immich-server:2283
+start override -e VITE_SERVER_URL=http://does-not-exist.invalid:9 -e IMMICH_URL=http://immich-server:2283
+start direct -e VITE_SERVER_URL=
+start legacy-path -e VITE_SERVER_URL=http://localhost:2293/immich-api
+start localhost -e VITE_SERVER_URL=http://localhost:2283
+for c in from-immich-url from-server-url override direct legacy-path localhost; do
+  wait_ready "$c"
+done
+
+echo "== proxy target from IMMICH_URL"
+expect_proxied from-immich-url
+get from-immich-url /select-user | grep -q '<div id="app">' || fail "SPA fallback broken"
 echo "ok"
 
-echo "== IMMICH_URL unset"
-get "$NAME-direct" /config.js | grep -q 'proxy: false' || fail "config.js should disable the proxy"
-get "$NAME-direct" / | grep -q 'config.js' || fail "index.html does not load config.js"
-if get "$NAME-direct" /api/server/ping >/dev/null 2>&1; then
-  fail "/api/ must not be served without IMMICH_URL"
-fi
+echo "== proxy target from VITE_SERVER_URL (no IMMICH_URL needed)"
+expect_proxied from-server-url
 echo "ok"
 
-echo "== invalid IMMICH_URL"
+echo "== IMMICH_URL overrides VITE_SERVER_URL"
+expect_proxied override
+echo "ok"
+
+echo "== neither set: direct mode"
+expect_direct direct
+get direct / | grep -q 'config.js' || fail "index.html does not load config.js"
+echo "ok"
+
+echo "== unusable VITE_SERVER_URL (path / localhost): container runs, proxy off"
+expect_direct legacy-path
+expect_direct localhost
+echo "ok"
+
+echo "== invalid IMMICH_URL stops the container"
 if output=$(docker run --rm -e IMMICH_URL=immich-server:2283 "$IMAGE" 2>&1); then
   fail "container started with an invalid IMMICH_URL"
 fi

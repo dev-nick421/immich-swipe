@@ -32,7 +32,7 @@ describe('useImmich error messages', () => {
     })
     expect(message).toContain('Could not reach Immich at http://immich.example.com')
     expect(message).toContain(`CORS requests from ${window.location.origin}`)
-    expect(message).toContain('IMMICH_URL')
+    expect(message).toContain('built-in proxy')
   })
 
   it('passes Immich error messages through', async () => {

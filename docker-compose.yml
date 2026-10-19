@@ -23,9 +23,10 @@ services:
     ports:
       - "2293:80"
     environment:
-      # Built-in Immich API proxy (runtime, no rebuild needed): how this container reaches Immich,
-      # e.g. http://immich-server:2283 (same Docker network) or http://192.168.1.10:2283.
-      # Empty = the browser talks to Immich directly, which requires CORS headers on Immich.
+      # Optional. The built-in Immich API proxy (no CORS setup needed) forwards to VITE_SERVER_URL.
+      # Set IMMICH_URL only if this container must reach Immich under another address than your
+      # browser, e.g. http://immich-server:2283 on Immich's Docker network. Read at container
+      # start, no rebuild needed.
       - IMMICH_URL=${IMMICH_URL:-}
     # To reach Immich by container name, join Immich's Docker network (see `docker network ls`):
     # networks:

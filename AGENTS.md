@@ -17,9 +17,9 @@
 
 ## Konfiguration (.env / Login-Flow)
 - `.env` Variablen (siehe `env.example` / `README.md`):
-  - `VITE_SERVER_URL` (Basis-URL für die API; Details siehe „API/Proxy/CORS“)
+  - `VITE_SERVER_URL` (Immich-URL wie im Browser; im Docker-Image zugleich Ziel des eingebauten Proxys; Details siehe „API/Proxy/CORS“)
   - `VITE_USER_<N>_NAME`, `VITE_USER_<N>_API_KEY` (alle Slots mit API-Key, aufsteigend sortiert, Lücken erlaubt; fehlender Name → `User <N>`; Werte werden getrimmt)
-  - `IMMICH_URL` ist **keine** Vite-Variable, sondern Runtime-Env des Containers (eingebauter Proxy, siehe unten)
+  - `IMMICH_URL` ist **keine** Vite-Variable, sondern optionale Runtime-Env des Containers: überschreibt `VITE_SERVER_URL` als Proxy-Ziel (nur nötig, wenn der Container Immich unter einer anderen Adresse erreicht als der Browser, oder beim generischen GHCR-Image ohne `VITE_SERVER_URL`)
   - Hinweis: `src/vite-env.d.ts`, `Dockerfile` und `docker-compose.yml` sind aktuell bis `N=5` verdrahtet; für mehr User diese Stellen erweitern.
 - Verhalten:
   - 1 User in `.env`: Auto-Login (keine Login-Seite)
@@ -40,10 +40,11 @@
   - `apiBaseUrl` (`src/stores/auth.ts`): mit eingebautem Proxy `<app-origin><BASE_URL>api`, sonst `immichBaseUrl + '/api'`
   - `immichBaseUrl` normalisiert `serverUrl` (entfernt ggf. `/api` am Ende) und wird immer für „Open in Immich“ genutzt
 - Eingebauter Proxy (Docker):
-  - Container-Env `IMMICH_URL` (z.B. `http://immich-server:2283`) → `docker/40-immich-swipe.sh` (läuft via `/docker-entrypoint.d/` vor nginx) schreibt `/etc/nginx/immich-swipe/runtime.conf`: `location ^~ /api/` → `IMMICH_URL`, Auflösung per `resolver` zur Request-Zeit, kein Buffering.
+  - Ziel: `IMMICH_URL` (Runtime-Env, Override), sonst `VITE_SERVER_URL` (per `ARG`/`ENV` im Runtime-Stage des `Dockerfile` ins Image gebacken). Beide sind im Normalfall dieselbe Adresse; ein separates `IMMICH_URL` braucht es nur für Docker-interne Namen (`http://immich-server:2283`) oder wenn die öffentliche Domain im LAN nicht erreichbar ist.
+  - `docker/40-immich-swipe.sh` (läuft via `/docker-entrypoint.d/` vor nginx) schreibt `/etc/nginx/immich-swipe/runtime.conf`: `location ^~ /api/` → Ziel, Auflösung per `resolver` zur Request-Zeit, kein Buffering.
   - `nginx.conf` liefert `/config.js` (`window.__IMMICH_SWIPE__ = { proxy: true|false }`, no-store). `public/config.js` ist der statische Default (proxy: false) für Dev/Preview/GitHub Pages. `index.html` lädt `config.js` vor der App.
-  - Ohne `IMMICH_URL`: direkter Zugriff wie bisher (CORS nötig), `/api/` auf der App antwortet mit JSON-Hinweis (404).
-  - Ungültige `IMMICH_URL` → Container bricht beim Start mit Fehlermeldung ab.
+  - Weder `IMMICH_URL` noch `VITE_SERVER_URL`: direkter Zugriff (CORS nötig), `/api/` auf der App antwortet mit JSON-Hinweis (404).
+  - Ungültige `IMMICH_URL` → Container bricht beim Start mit Fehlermeldung ab. Unbrauchbare `VITE_SERVER_URL` (mit Pfad, z.B. alter `/immich-api`-Workaround, oder `localhost`) → nur Warnung, Proxy aus.
 - Fehlermeldungen: `apiRequest()` übersetzt Netzwerkfehler (CORS/nicht erreichbar/Mixed Content), Nicht-JSON-Antworten und Immich-Fehler (v2 `message[]`, v3 `errors[]`) in verständliche Texte; LoginView zeigt sie nach „Failed to connect:“ an.
 
 ## Immich API (Erkenntnisse / relevante Endpoints)
@@ -69,14 +70,14 @@
 - API-Key-Berechtigungen: `user.read`, `asset.read`, `asset.view`, `asset.download`, `asset.delete`, `asset.update`, `album.read`, `albumAsset.create`
 
 ## Docker/Deployment
-- `docker-compose.yml` baut das Image, veröffentlicht Port `2293:80` und reicht `IMMICH_URL` als Runtime-Env durch.
+- `docker-compose.yml` baut das Image, veröffentlicht Port `2293:80` und reicht das optionale `IMMICH_URL` als Runtime-Env durch.
 - Die `VITE_*` Werte der `.env` werden als **Build-Args** in den Build gebacken (siehe `Dockerfile` + `docker-compose.yml`).
   - Änderung der `VITE_*` Werte erfordert Rebuild (`docker compose up -d --build`); `IMMICH_URL` nur Recreate.
 - Runtime-Server ist Nginx (`nginx:alpine`) und serviert `dist/` + `nginx.conf` + `docker/40-immich-swipe.sh` (Entrypoint-Hook).
 - `.gitattributes` erzwingt LF für `*.sh`/`*.conf` (CRLF würde den Entrypoint-Hook brechen).
 - CI/CD:
   - `.github/workflows/ci.yml` (PRs + `main`): Type-Check, Tests, Build, Docker-Build + `docker/smoke-test.sh`.
-  - `.github/workflows/publish-ghcr.yml` baut, smoke-testet & pushed ein generisches Image nach GHCR (`ghcr.io/<owner>/<repo>`) bei Push auf `main` und Tags `v*` (keine Build-Args/Keys im Workflow → Konfiguration per `IMMICH_URL` + manuellem Login, Auto-Login nur via Custom Build).
+  - `.github/workflows/publish-ghcr.yml` baut, smoke-testet & pushed ein generisches Image nach GHCR (`ghcr.io/<owner>/<repo>`) bei Push auf `main` und Tags `v*` (keine Build-Args/Keys im Workflow → kein `VITE_SERVER_URL`, daher Konfiguration per `IMMICH_URL` + manuellem Login, Auto-Login nur via Custom Build).
 
 ## Code-Map (wichtigste Stellen)
 - Routing/Auth:

@@ -44,13 +44,19 @@ RUN npm run build
 # Production stage
 FROM nginx:alpine
 
+# The Immich URL from the build is also the default target of the built-in Immich API proxy
+# (docker/40-immich-swipe.sh); IMMICH_URL overrides it at runtime. Not a secret: the URL is in
+# the frontend bundle anyway (API keys are not copied into this stage).
+ARG VITE_SERVER_URL
+ENV VITE_SERVER_URL=$VITE_SERVER_URL
+
 # Copy built files
 COPY --from=builder /app/dist /usr/share/nginx/html
 
 # Copy nginx config
 COPY nginx.conf /etc/nginx/conf.d/default.conf
 
-# Runtime config (IMMICH_URL -> built-in Immich API proxy), runs before nginx starts.
+# Runtime config (built-in Immich API proxy), runs before nginx starts.
 # sed: tolerate CRLF line endings from Windows checkouts.
 COPY docker/40-immich-swipe.sh /docker-entrypoint.d/40-immich-swipe.sh
 RUN sed -i 's/\r$//' /docker-entrypoint.d/40-immich-swipe.sh && chmod +x /docker-entrypoint.d/40-immich-swipe.sh

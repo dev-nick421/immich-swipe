@@ -62,8 +62,8 @@ services:
     ports:
       - "2293:80"
     environment:
-      # How this container reaches Immich (see "Connecting to Immich" below)
-      - IMMICH_URL=http://immich-server:2283
+      # Your Immich URL, as reachable from this container (see "Connecting to Immich" below)
+      - IMMICH_URL=http://192.168.1.10:2283
 ```
 
 Open `http://<host>:2293` and log in with your Immich server URL and an API key.
@@ -78,7 +78,9 @@ docker compose up -d --build
 
 Open `http://localhost:2293`.
 
-Note: `VITE_*` values from `.env` are passed as build args and end up in the frontend bundle, so changing them requires `docker compose up -d --build`. `IMMICH_URL` is read when the container starts; changing it only needs `docker compose up -d`.
+`VITE_SERVER_URL` is the only URL you need: the container also forwards API calls to it (built-in proxy, see below).
+
+Note: `VITE_*` values from `.env` are passed as build args and end up in the frontend bundle, so changing them requires `docker compose up -d --build`. The optional `IMMICH_URL` is read when the container starts; changing it only needs `docker compose up -d`.
 
 ### GitHub Pages
 
@@ -135,18 +137,18 @@ Immich Swipe has no backend: your browser calls Immich's API (`/api/...`) with t
 
 ### Option 1: built-in proxy (Docker image, recommended)
 
-Set `IMMICH_URL` on the Immich Swipe container to the address under which **the container** reaches Immich:
+The container forwards `/api/` to Immich. Browser and API share one origin, so no CORS configuration is needed. The proxy's target is your Immich URL:
 
-- same Docker network as Immich: `http://immich-server:2283` (join Immich's network, see `docker-compose.yml`)
-- otherwise the LAN address: `http://192.168.1.10:2283`, or your public `https://immich.example.com`
+- image built with `.env`: `VITE_SERVER_URL`, nothing else to configure
+- prebuilt image (built without `VITE_SERVER_URL`): set `IMMICH_URL` to your Immich URL
 
-The container then forwards `/api/` to Immich. Browser and API share one origin, so no CORS configuration is needed. The server URL you enter at login (or `VITE_SERVER_URL`) is still used for the "Open in Immich" button, so use the address you open Immich with in your browser.
+Both are normally the same address, the one you open Immich with in your browser. Set `IMMICH_URL` in addition to `VITE_SERVER_URL` only if the container has to reach Immich under a different address than your browser: `http://immich-server:2283` on Immich's Docker network (see `docker-compose.yml`), or a LAN IP like `http://192.168.1.10:2283` when your public domain is not reachable from inside your network. The browser keeps using the server URL (login or `VITE_SERVER_URL`) for the "Open in Immich" button.
 
-`docker logs immich-swipe` shows whether the proxy is enabled. `http://<host>:2293/config.js` shows `proxy: true` when it is.
+`docker logs immich-swipe` shows whether the proxy is enabled and which address it uses. `http://<host>:2293/config.js` shows `proxy: true` when it is on.
 
 ### Option 2: CORS headers on your reverse proxy
 
-Without `IMMICH_URL` (or when hosting the static build elsewhere, e.g. GitHub Pages), the browser calls the Immich server URL directly. Add CORS headers in the reverse proxy in front of Immich (for Nginx Proxy Manager: the Immich proxy host's configuration):
+When the proxy is off (prebuilt image without `IMMICH_URL`, or the static build hosted elsewhere, e.g. GitHub Pages), the browser calls the Immich server URL directly. Add CORS headers in the reverse proxy in front of Immich (for Nginx Proxy Manager: the Immich proxy host's configuration):
 
 ```nginx
 add_header 'Access-Control-Allow-Origin' '*' always;
@@ -175,9 +177,9 @@ The login screen and the error screen show what went wrong. More details are in 
 
 | Message | Cause / fix |
 |---|---|
-| `Could not reach Immich at …` (browser: "Failed to fetch", "NetworkError …", "Load failed") | Immich is not reachable from the browser or does not allow CORS. Use the built-in proxy (`IMMICH_URL`) or add CORS headers (see above). |
+| `Could not reach Immich at …` (browser: "Failed to fetch", "NetworkError …", "Load failed") | Immich is not reachable from the browser or does not allow CORS. Use the built-in proxy or add CORS headers (see above). |
 | `… this page uses HTTPS, the Immich server URL uses HTTP …` | Browsers block HTTP requests from HTTPS pages. Use an `https://` server URL, or the built-in proxy. |
-| `The built-in proxy could not reach Immich (HTTP 502)` | The container cannot reach `IMMICH_URL`. Check `docker logs immich-swipe` and test with `docker exec immich-swipe wget -qO- http://immich-server:2283/api/server/ping`. |
+| `The built-in proxy could not reach Immich (HTTP 502)` | The container cannot reach Immich under `VITE_SERVER_URL` / `IMMICH_URL`. Check `docker logs immich-swipe`, test with `docker exec immich-swipe wget -qO- <url>/api/server/ping` and set `IMMICH_URL` to an address the container can reach. |
 | Container exits with `error: IMMICH_URL must be …` | `IMMICH_URL` needs scheme, host and optional port, e.g. `http://immich-server:2283`. |
 | `Invalid API key` / `Missing required permission: …` | Wrong key, or the key lacks a permission (see below). |
 | `Unexpected response … (not JSON)` / `… not found. Does the server URL point to Immich?` | The server URL points to another web app (e.g. Immich Swipe itself) instead of Immich. |
