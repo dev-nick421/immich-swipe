@@ -29,6 +29,11 @@ jobs:
       - name: Build app
         run: npm run build
 
+      - name: Smoke test image
+        run: |
+          docker build -t immich-swipe:smoke .
+          docker/smoke-test.sh immich-swipe:smoke
+
       - name: Setup Docker Buildx
         uses: docker/setup-buildx-action@v3
 
