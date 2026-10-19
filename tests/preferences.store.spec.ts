@@ -1,4 +1,5 @@
 import { createPinia, setActivePinia } from 'pinia'
+import { nextTick } from 'vue'
 import { usePreferencesStore } from '@/stores/preferences'
 import { useAuthStore } from '@/stores/auth'
 
@@ -8,7 +9,7 @@ describe('preferences store', () => {
     setActivePinia(createPinia())
   })
 
-  it('persists review order and hotkeys', () => {
+  it('persists review order and hotkeys', async () => {
     const auth = useAuthStore()
     auth.setConfig('http://server-a', 'key-a', 'Alice')
 
@@ -16,6 +17,7 @@ describe('preferences store', () => {
     prefs.setReviewOrder('chronological')
     prefs.setHotkey('1', 'album-a')
     prefs.setLastUsedAlbumId('album-a')
+    await nextTick()
 
     const keys = Object.keys(localStorage).filter((k) => k.startsWith('immich-swipe-preferences'))
     expect(keys.length).toBe(1)
@@ -31,13 +33,15 @@ describe('preferences store', () => {
     expect(prefsReloaded.albumHotkeys['1']).toBe('album-a')
   })
 
-  it('switches namespace when user changes', () => {
+  it('switches namespace when user changes', async () => {
     const auth = useAuthStore()
     auth.setConfig('http://server-a', 'key-a', 'Alice')
     const prefs = usePreferencesStore()
     prefs.setHotkey('2', 'album-a2')
+    await nextTick()
 
     auth.setConfig('http://server-b', 'key-b', 'Bob')
+    await nextTick()
     // Preferences should reset for the new namespace
     expect(prefs.reviewOrder).toBe('random')
     expect(Object.keys(prefs.albumHotkeys).length).toBe(0)

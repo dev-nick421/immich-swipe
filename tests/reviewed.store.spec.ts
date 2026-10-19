@@ -1,4 +1,5 @@
 import { createPinia, setActivePinia } from 'pinia'
+import { nextTick } from 'vue'
 import { useAuthStore } from '@/stores/auth'
 import { useReviewedStore } from '@/stores/reviewed'
 
@@ -29,7 +30,7 @@ describe('reviewed store', () => {
     expect(reviewed.isReviewed('asset-1')).toBe(false)
   })
 
-  it('scopes cache by server/user', () => {
+  it('scopes cache by server/user', async () => {
     const auth = useAuthStore()
     auth.setConfig('http://server-a', 'key-a', 'Alice')
 
@@ -37,8 +38,10 @@ describe('reviewed store', () => {
     reviewed.markReviewed('asset-1', 'keep')
 
     auth.setConfig('http://server-b', 'key-b', 'Bob')
+    await nextTick()
     expect(reviewed.isReviewed('asset-1')).toBe(false)
 
+    reviewed.markReviewed('asset-2', 'delete')
     const keys = Object.keys(localStorage).filter((k) => k.startsWith('immich-swipe-reviewed'))
     expect(keys.length).toBe(2)
   })

@@ -27,6 +27,7 @@ describe('useImmich album flow', () => {
   }
 
   beforeEach(() => {
+    localStorage.clear()
     setActivePinia(createPinia())
     vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, ..._rest: unknown[]) => {
       const url = typeof input === 'string' ? input : input.toString()
