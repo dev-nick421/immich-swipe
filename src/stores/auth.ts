@@ -159,7 +159,8 @@ export const useAuthStore = defineStore('auth', () => {
 
     if (config) {
       if (config.source === 'env') {
-        migrateLegacyUserData(normalizeServerUrl(config.serverUrl), config.userName || '')
+        // Same server string the per-user stores build their keys from
+        migrateLegacyUserData(config.serverUrl, config.userName || '')
       }
       serverUrl.value = config.serverUrl
       apiKey.value = config.apiKey
