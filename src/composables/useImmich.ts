@@ -68,6 +68,49 @@ export function useImmich() {
     }
   )
 
+  // fetch() only reports "Failed to fetch" / "NetworkError ..." / "Load failed"; name the likely cause
+  function describeNetworkError(url: string): string {
+    const target = new URL(url, window.location.href)
+    if (window.location.protocol === 'https:' && target.protocol === 'http:') {
+      return `The browser blocked the request to ${target.origin}: this page uses HTTPS, the Immich server URL uses HTTP. Use an https:// server URL.`
+    }
+    if (target.origin === window.location.origin) {
+      return `Could not reach the built-in Immich proxy at ${target.origin}.`
+    }
+    return `Could not reach Immich at ${target.origin}. Check the server URL and that Immich (or its reverse proxy) allows CORS requests from ${window.location.origin}, or set IMMICH_URL on the Docker container to use the built-in proxy.`
+  }
+
+  function describeHttpError(response: Response, errorText: string): string {
+    try {
+      const errorJson = JSON.parse(errorText)
+      // Immich v2 validation errors use a message array, v3 adds an errors array
+      let message = Array.isArray(errorJson.message) ? errorJson.message.join('; ') : errorJson.message
+      if (Array.isArray(errorJson.errors) && errorJson.errors.length > 0) {
+        const details = errorJson.errors
+          .map((e: { path?: unknown; message?: string }) => {
+            const path = Array.isArray(e.path) ? e.path.join('.') : e.path
+            return path ? `${path}: ${e.message}` : e.message
+          })
+          .filter(Boolean)
+          .join('; ')
+        if (details) message = `${message || 'Validation failed'} (${details})`
+      }
+      if (message || errorJson.error) return message || errorJson.error
+    } catch {
+      // Not JSON, e.g. an HTML error page from a reverse proxy
+    }
+
+    if (authStore.useBuiltInProxy && [502, 503, 504].includes(response.status)) {
+      return `The built-in proxy could not reach Immich (HTTP ${response.status}). Check IMMICH_URL and the container logs.`
+    }
+    if (response.status === 404) {
+      return `API error: 404 - ${response.url || 'endpoint'} not found. Does the server URL point to Immich?`
+    }
+    const text = errorText.trim()
+    const detail = text && !text.startsWith('<') && text.length <= 200 ? ` - ${text}` : ''
+    return `API error: ${response.status}${response.statusText ? ` ${response.statusText}` : ''}${detail}`
+  }
+
   // Generic Immich API request helper
   async function apiRequest<T>(
     endpoint: string,
@@ -79,6 +122,9 @@ export function useImmich() {
 
     const normalizedEndpoint = endpoint.startsWith('/') ? endpoint : `/${endpoint}`
     const url = `${authStore.apiBaseUrl}${normalizedEndpoint}`
+    if (!/^https?:\/\//i.test(url)) {
+      throw new Error(`Invalid Immich server URL "${authStore.serverUrl}": it must start with http:// or https://`)
+    }
     const headers: HeadersInit = {
       'x-api-key': authStore.apiKey,
       'Accept': 'application/json',
@@ -90,27 +136,30 @@ export function useImmich() {
       (headers as Record<string, string>)['Content-Type'] = 'application/json'
     }
 
-    const response = await fetch(url, {
-      ...options,
-      headers,
-    })
+    let response: Response
+    try {
+      response = await fetch(url, {
+        ...options,
+        headers,
+      })
+    } catch (e) {
+      console.error(`[Immich] ${options.method || 'GET'} ${url} failed:`, e)
+      throw new Error(describeNetworkError(url))
+    }
 
     if (!response.ok) {
-      const errorText = await response.text()
-      let errorMessage: string
-      try {
-        const errorJson = JSON.parse(errorText)
-        errorMessage = errorJson.message || errorJson.error || `API error: ${response.status}`
-      } catch {
-        errorMessage = `API error: ${response.status} - ${errorText}`
-      }
-      throw new Error(errorMessage)
+      throw new Error(describeHttpError(response, await response.text()))
     }
 
     // Handle empty
     const text = await response.text()
     if (!text) return {} as T
-    return JSON.parse(text)
+    try {
+      return JSON.parse(text)
+    } catch {
+      // Typically index.html of a web app, i.e. the server URL is not the Immich server
+      throw new Error(`Unexpected response from ${url} (not JSON). Does the server URL point to Immich?`)
+    }
   }
 
   // Test connection
@@ -120,6 +169,7 @@ export function useImmich() {
       await apiRequest('/users/me')
       return true
     } catch (e) {
+      console.error('[Immich] Connection test failed:', e)
       error.value = e instanceof Error ? e.message : 'Connection failed'
       return false
     } finally {

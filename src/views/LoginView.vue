@@ -8,7 +8,7 @@ import { useImmich } from '@/composables/useImmich'
 const router = useRouter()
 const authStore = useAuthStore()
 const uiStore = useUiStore()
-const { testConnection } = useImmich()
+const { testConnection, error: connectionError } = useImmich()
 
 const serverUrl = ref(authStore.serverUrl || '')
 const apiKey = ref(authStore.apiKey || '')
@@ -51,7 +51,9 @@ async function handleSubmit() {
     uiStore.toast('Connected successfully!', 'success')
     router.push('/')
   } else {
-    error.value = 'Failed to connect. Please check your URL and API key.'
+    error.value = connectionError.value
+      ? `Failed to connect: ${connectionError.value}`
+      : 'Failed to connect. Please check your URL and API key.'
     authStore.clearConfig()
   }
 
