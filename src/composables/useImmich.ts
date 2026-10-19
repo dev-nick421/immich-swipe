@@ -8,6 +8,7 @@ import type {
   ImmichAlbum,
   MetadataSearchRequest,
   MetadataSearchResponse,
+  RandomSearchRequest,
 } from '@/types/immich'
 
 export function useImmich() {
@@ -29,11 +30,11 @@ export function useImmich() {
   const albumsCache = ref<ImmichAlbum[] | null>(null)
 
   const chronologicalQueue = ref<ImmichAsset[]>([])
-  const chronologicalSkip = ref(0)
+  // Next page to request; null once the last page has been loaded
   const chronologicalPage = ref<number | null>(1)
-  const chronologicalPagingMode = ref<'skip' | 'page' | null>(null)
-  const chronologicalHasMore = ref(true)
-  const isFetchingChronological = ref(false)
+  let chronologicalRequest: Promise<void> | null = null
+  // Bumped on every reset so responses from a previous flow are dropped
+  let reviewFlowGeneration = 0
 
   type ReviewAction = {
     asset: ImmichAsset
@@ -50,11 +51,10 @@ export function useImmich() {
   }
 
   function resetReviewFlow() {
+    reviewFlowGeneration++
     chronologicalQueue.value = []
-    chronologicalSkip.value = 0
     chronologicalPage.value = 1
-    chronologicalPagingMode.value = null
-    chronologicalHasMore.value = true
+    chronologicalRequest = null
     nextAsset.value = null
     pendingAssets.value = []
     actionHistory.value = []
@@ -132,8 +132,19 @@ export function useImmich() {
     try {
       const attempts = uiStore.skipVideos ? SKIP_VIDEOS_MAX_ATTEMPTS : RANDOM_MAX_ATTEMPTS
       for (let attempt = 0; attempt < attempts; attempt++) {
-        const count = uiStore.skipVideos ? SKIP_VIDEOS_BATCH_SIZE : RANDOM_BATCH_SIZE
-        const assets = await apiRequest<ImmichAsset[]>(`/assets/random?count=${count}`)
+        const body: RandomSearchRequest = {
+          size: uiStore.skipVideos ? SKIP_VIDEOS_BATCH_SIZE : RANDOM_BATCH_SIZE,
+          // Explicit: Immich v3 otherwise also returns hidden assets (e.g. live photo video parts)
+          visibility: 'timeline',
+        }
+        if (uiStore.skipVideos) {
+          body.type = 'IMAGE'
+        }
+        // GET /assets/random was removed in Immich v3; POST /search/random works on v1.116+
+        const assets = await apiRequest<ImmichAsset[]>('/search/random', {
+          method: 'POST',
+          body: JSON.stringify(body),
+        })
         if (!assets || assets.length === 0) {
           continue
         }
@@ -152,121 +163,62 @@ export function useImmich() {
     }
   }
 
-  async function fetchChronologicalBatch(): Promise<{ items: ImmichAsset[]; hasMore: boolean; nextPage: number | null }> {
-    const order = preferencesStore.reviewOrder === 'chronological-desc' ? 'desc' : 'asc'
-    const usePagePagination = chronologicalPagingMode.value !== 'skip'
+  async function fetchChronologicalBatch(page: number): Promise<{ items: ImmichAsset[]; nextPage: number | null }> {
     const body: MetadataSearchRequest = {
-      order,
-      assetType: ['IMAGE', 'VIDEO'],
-    }
-    if (usePagePagination && chronologicalPage.value !== null) {
-      body.page = chronologicalPage.value
-      body.size = CHRONO_PAGE_SIZE
-    } else {
-      body.take = CHRONO_PAGE_SIZE
-      body.skip = chronologicalSkip.value
+      order: preferencesStore.reviewOrder === 'chronological-desc' ? 'desc' : 'asc',
+      page,
+      size: CHRONO_PAGE_SIZE,
+      // Explicit: Immich v3 otherwise also returns hidden assets (e.g. live photo video parts)
+      visibility: 'timeline',
     }
 
-    let response: MetadataSearchResponse | ImmichAsset[]
-    try {
-      response = await apiRequest<MetadataSearchResponse | ImmichAsset[]>('/search/metadata', {
-        method: 'POST',
-        body: JSON.stringify(body),
-      })
-    } catch (e) {
-      if (!usePagePagination || chronologicalPagingMode.value === 'skip') {
-        throw e
-      }
+    const response = await apiRequest<MetadataSearchResponse>('/search/metadata', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    })
 
-      chronologicalPagingMode.value = 'skip'
-      chronologicalPage.value = null
-      const fallbackBody: MetadataSearchRequest = {
-        order,
-        assetType: ['IMAGE', 'VIDEO'],
-        take: CHRONO_PAGE_SIZE,
-        skip: chronologicalSkip.value,
-      }
-      response = await apiRequest<MetadataSearchResponse | ImmichAsset[]>('/search/metadata', {
-        method: 'POST',
-        body: JSON.stringify(fallbackBody),
-      })
-    }
-
-    if (chronologicalPagingMode.value === null) {
-      if (Array.isArray(response)) {
-        chronologicalPagingMode.value = 'skip'
-        chronologicalPage.value = null
-      } else if (response?.nextPage !== undefined || response?.hasNextPage !== undefined) {
-        chronologicalPagingMode.value = 'page'
-      } else if (usePagePagination) {
-        chronologicalPagingMode.value = 'page'
-      } else {
-        chronologicalPagingMode.value = 'skip'
-        chronologicalPage.value = null
-      }
-    }
-
-    const items = Array.isArray(response)
-      ? response
-      : response?.assets?.items ?? response?.items ?? []
-
-    let hasMore = items.length === CHRONO_PAGE_SIZE
+    const items = response?.assets?.items ?? []
+    const rawNextPage = response?.assets?.nextPage
     let nextPage: number | null = null
-
-    if (!Array.isArray(response)) {
-      if (typeof response.hasNextPage === 'boolean') {
-        hasMore = response.hasNextPage
-      } else if (response?.nextPage !== undefined && response?.nextPage !== null) {
-        hasMore = true
-        const parsedNext = Number(response.nextPage)
-        nextPage = Number.isNaN(parsedNext) ? null : parsedNext
-      } else if (typeof response.assets?.total === 'number' && typeof response.assets?.count === 'number') {
-        if (response.assets.total > response.assets.count) {
-          hasMore = true
-        }
-      }
+    if (rawNextPage === undefined) {
+      // Server without nextPage: keep going while pages are full
+      nextPage = items.length === CHRONO_PAGE_SIZE ? page + 1 : null
+    } else if (rawNextPage !== null) {
+      const parsed = Number(rawNextPage)
+      nextPage = Number.isInteger(parsed) && parsed > page ? parsed : null
     }
 
-    return { items, hasMore, nextPage }
+    return { items, nextPage }
   }
 
   async function fetchNextChronologicalAsset(): Promise<ImmichAsset | null> {
-    while (chronologicalQueue.value.length === 0 && chronologicalHasMore.value) {
+    while (chronologicalQueue.value.length === 0 && chronologicalPage.value !== null) {
       await loadChronologicalBatch()
-    }
-
-    if (chronologicalQueue.value.length === 0) {
-      return null
     }
 
     return chronologicalQueue.value.shift() || null
   }
 
-  async function loadChronologicalBatch(): Promise<void> {
-    if (isFetchingChronological.value || !chronologicalHasMore.value) return
-    isFetchingChronological.value = true
+  // Current asset and preload share one in-flight request, so a page is never fetched twice
+  // and callers never spin while another request is running. Errors propagate to the caller.
+  function loadChronologicalBatch(): Promise<void> {
+    if (chronologicalRequest) return chronologicalRequest
 
-    try {
-      const batch = await fetchChronologicalBatch()
-      if (chronologicalPagingMode.value === 'skip') {
-        chronologicalSkip.value += batch.items.length
+    const generation = reviewFlowGeneration
+    const request = (async () => {
+      const page = chronologicalPage.value
+      if (page === null) return
+      const batch = await fetchChronologicalBatch(page)
+      if (generation !== reviewFlowGeneration) return
+      chronologicalPage.value = batch.nextPage
+      chronologicalQueue.value.push(...batch.items.filter(isReviewable))
+    })().finally(() => {
+      if (chronologicalRequest === request) {
+        chronologicalRequest = null
       }
-      chronologicalHasMore.value = batch.hasMore
-      if (batch.nextPage !== null && !Number.isNaN(batch.nextPage)) {
-        chronologicalPage.value = batch.nextPage
-      } else if (chronologicalPage.value !== null && batch.hasMore) {
-        chronologicalPage.value += 1
-      }
-
-      const filtered = batch.items.filter(isReviewable)
-      chronologicalQueue.value.push(...filtered)
-    } catch (e) {
-      console.error('Failed to fetch chronological assets:', e)
-      chronologicalHasMore.value = false
-      error.value = e instanceof Error ? e.message : 'Failed to load chronological assets'
-    } finally {
-      isFetchingChronological.value = false
-    }
+    })
+    chronologicalRequest = request
+    return request
   }
 
   async function fetchNextAsset(): Promise<ImmichAsset | null> {
