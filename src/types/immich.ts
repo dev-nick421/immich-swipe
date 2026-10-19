@@ -33,6 +33,9 @@ export interface ImmichAsset {
 export interface ImmichConfig {
   serverUrl: string
   apiKey: string
+  userName?: string
+  // 'env' = logged in via a VITE_USER_* entry, 'manual' = login form
+  source?: 'env' | 'manual'
 }
 
 export interface DeleteAssetsRequest {
