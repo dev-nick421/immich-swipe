@@ -50,6 +50,11 @@ COPY --from=builder /app/dist /usr/share/nginx/html
 # Copy nginx config
 COPY nginx.conf /etc/nginx/conf.d/default.conf
 
+# Runtime config (IMMICH_URL -> built-in Immich API proxy), runs before nginx starts.
+# sed: tolerate CRLF line endings from Windows checkouts.
+COPY docker/40-immich-swipe.sh /docker-entrypoint.d/40-immich-swipe.sh
+RUN sed -i 's/\r$//' /docker-entrypoint.d/40-immich-swipe.sh && chmod +x /docker-entrypoint.d/40-immich-swipe.sh
+
 # Expose port
 EXPOSE 80
 

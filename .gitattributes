@@ -1,0 +1,5 @@
+# Shell scripts and nginx config run inside the Linux container; CRLF line endings (Windows
+# checkouts) would break them.
+*.sh text eol=lf
+*.conf text eol=lf
+Dockerfile text eol=lf

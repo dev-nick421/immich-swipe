@@ -105,7 +105,8 @@ export const useAuthStore = defineStore('auth', () => {
   const apiKey = ref<string>('')
   const currentUserName = ref<string>('')
   const hasStoredConfig = ref<boolean>(false)
-  const proxyBaseUrl = '/api'
+  // Docker image with IMMICH_URL: the Immich API is reachable on this app's own origin
+  const useBuiltInProxy = window.__IMMICH_SWIPE__?.proxy === true
 
   // .env state
   const hasEnvConfig = computed(() => envConfig !== null && envConfig.users.length > 0)
@@ -233,11 +234,14 @@ export const useAuthStore = defineStore('auth', () => {
     return serverUrl.value.replace(/\/api\/?$/, '')
   })
 
-  // Base URL for direct Immich API calls (always ends with /api)
+  // Base URL for Immich API calls (always ends with /api). With the built-in proxy the browser
+  // stays on its own origin (no CORS); the server URL is then only used for "Open in Immich".
   const apiBaseUrl = computed(() => {
     if (!serverUrl.value) return ''
-    const normalized = serverUrl.value.replace(/\/+$/, '')
-    return normalized.endsWith('/api') ? normalized : `${normalized}/api`
+    if (useBuiltInProxy) {
+      return new URL(`${import.meta.env.BASE_URL}api`, window.location.origin).toString()
+    }
+    return `${immichBaseUrl.value}/api`
   })
 
   // Initialize
@@ -251,7 +255,7 @@ export const useAuthStore = defineStore('auth', () => {
     hasStoredConfig,
     immichBaseUrl,
     apiBaseUrl,
-    proxyBaseUrl,
+    useBuiltInProxy,
     hasEnvConfig,
     envUsers,
     needsUserSelection,

@@ -27,10 +27,7 @@ const videoLoading = ref(false)
 const videoRef = ref<HTMLVideoElement | null>(null)
 const videoAbortController = ref<AbortController | null>(null)
 let autoplayCleanup: (() => void) | null = null
-const assetApiBaseUrl = computed(() => {
-  if (!authStore.immichBaseUrl) return ''
-  return `${authStore.immichBaseUrl}${authStore.proxyBaseUrl}`
-})
+const assetApiBaseUrl = computed(() => authStore.apiBaseUrl)
 const assetPageUrl = computed(() => {
   if (!authStore.immichBaseUrl) return ''
   try {
@@ -108,7 +105,6 @@ function buildAssetApiUrl(path: string): string {
 function getAuthHeaders(): Record<string, string> {
   return {
     'x-api-key': authStore.apiKey,
-    'X-Target-Host': authStore.immichBaseUrl,
   }
 }
 

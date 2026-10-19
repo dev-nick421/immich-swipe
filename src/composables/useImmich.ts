@@ -78,7 +78,7 @@ export function useImmich() {
     }
 
     const normalizedEndpoint = endpoint.startsWith('/') ? endpoint : `/${endpoint}`
-    const url = `${authStore.immichBaseUrl}${authStore.proxyBaseUrl}${normalizedEndpoint}`
+    const url = `${authStore.apiBaseUrl}${normalizedEndpoint}`
     const headers: HeadersInit = {
       'x-api-key': authStore.apiKey,
       'Accept': 'application/json',
@@ -274,10 +274,7 @@ export function useImmich() {
         const url = getAssetThumbnailUrl(nextAsset.value.id, 'preview')
         if (!url) return
         fetch(url, {
-          headers: {
-            'x-api-key': authStore.apiKey,
-            'X-Target-Host': authStore.immichBaseUrl,
-          },
+          headers: getAuthHeaders(),
         }).catch(() => {})
       }
     } catch (e) {
@@ -320,21 +317,20 @@ export function useImmich() {
     if (!authStore.immichBaseUrl) {
       return ''
     }
-    return `${authStore.immichBaseUrl}${authStore.proxyBaseUrl}/assets/${assetId}/thumbnail?size=${size}`
+    return `${authStore.apiBaseUrl}/assets/${assetId}/thumbnail?size=${size}`
   }
 
   function getAssetOriginalUrl(assetId: string): string {
     if (!authStore.immichBaseUrl) {
       return ''
     }
-    return `${authStore.immichBaseUrl}${authStore.proxyBaseUrl}/assets/${assetId}/original`
+    return `${authStore.apiBaseUrl}/assets/${assetId}/original`
   }
 
   // Get headers for image requests
   function getAuthHeaders(): Record<string, string> {
     return {
       'x-api-key': authStore.apiKey,
-      'X-Target-Host': authStore.immichBaseUrl,
     }
   }
 

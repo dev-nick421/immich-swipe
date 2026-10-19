@@ -76,6 +76,28 @@ describe('useImmich search requests', () => {
     expect(callsTo(fetchMock, '/assets/random')).toHaveLength(0)
   })
 
+  it('uses the built-in proxy on the app origin when /config.js enables it', async () => {
+    window.__IMMICH_SWIPE__ = { proxy: true }
+    try {
+      setActivePinia(createPinia())
+      const auth = useAuthStore()
+      auth.setConfig('https://immich.example.com', 'api-key', 'Alice')
+      const fetchMock = mockFetch({
+        '/search/random': () => new Response(JSON.stringify([makeAsset('a1')])),
+      })
+
+      const immich = useImmich()
+      await immich.loadInitialAsset()
+
+      expect(callsTo(fetchMock, '/search/random')[0][0]).toBe(`${window.location.origin}/api/search/random`)
+      expect(immich.getAssetThumbnailUrl('a1')).toBe(`${window.location.origin}/api/assets/a1/thumbnail?size=preview`)
+      // "Open in Immich" keeps using the server URL
+      expect(auth.immichBaseUrl).toBe('https://immich.example.com')
+    } finally {
+      delete window.__IMMICH_SWIPE__
+    }
+  })
+
   it('random mode asks the server for images only when skipping videos', async () => {
     const fetchMock = mockFetch({
       '/search/random': () => new Response(JSON.stringify([makeAsset('a1')])),
