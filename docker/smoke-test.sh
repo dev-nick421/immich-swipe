@@ -13,6 +13,7 @@ cleanup() {
   rm -rf "$STUB_DIR"
 }
 trap cleanup EXIT
+trap 'exit 130' INT TERM HUP
 
 fail() {
   echo "FAIL: $*"
