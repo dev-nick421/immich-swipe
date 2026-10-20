@@ -106,6 +106,8 @@ echo "ok"
 echo "== neither set: direct mode"
 expect_direct direct
 get direct / | grep -q 'config.js' || fail "index.html does not load config.js"
+docker exec "$NAME-direct" wget -qS -O /dev/null http://127.0.0.1/manifest.webmanifest 2>&1 \
+  | grep -qi 'content-type: application/manifest+json' || fail "manifest served with the wrong content type"
 echo "ok"
 
 echo "== unusable VITE_SERVER_URL (path / localhost): container runs, proxy off"
