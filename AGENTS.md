@@ -28,7 +28,8 @@
 - Gespeicherter Login (`src/stores/auth.ts`): Mit `.env`-Usern gilt ein gespeicherter Login nur, wenn Server-URL und API-Key noch zu einem `.env`-User passen (sonst verworfen → Auswahl/Auto-Login). Ohne `.env`-User werden Logins aus einem früheren `.env`-Build verworfen. Der User-Name wird beim Reload wiederhergestellt (#8).
 - Wichtige lokale Storage Keys:
   - Auth: `immich-swipe-config` (Server-URL, API Key, `userName`, `source: 'env' | 'manual'`)
-  - UI: `immich-swipe-theme`, `immich-swipe-skip-videos`
+  - UI: `immich-swipe-theme`, `immich-swipe-skip-videos`, `immich-swipe-tutorial-seen`
+  - Präferenzen: `immich-swipe-preferences:<server>:<user>` (Reihenfolge, Album-Filter, Album-Hotkeys)
   - Stats: `immich-swipe-stats:<server>:<user>` (keep/delete Counter)
   - Review-Cache: `immich-swipe-reviewed:<server>:<user>` (bereits gesehene IDs + keep/delete)
 - Security-Hinweis: `VITE_*` Variablen sind Build-Time und landen im Frontend-Bundle → `VITE_USER_*_API_KEY` nur für private Deployments/Images nutzen (nicht öffentlich publishen).
@@ -57,6 +58,8 @@
 - v3 validiert mit Zod (unbekannte Felder werden ignoriert, Fehler als `{ message: 'Validation failed', errors: [...] }`)
 - Albums:
   - `GET /albums` (v2: nur eigene, daher zusätzlich `?shared=true`; v3: eigene + geteilte, `shared` wird ignoriert)
+  - Alben eines Assets: `GET /albums?assetId=<id>` (#20: Anzeige auf der Karte, Rückfrage vor dem Löschen, Häkchen im Album-Picker)
+  - Album-Filter (#20) auf `/search/random` und `/search/metadata`: `isNotInAlbum: true` bzw. `albumIds: [id]`. „In irgendeinem Album“ geht mit den flachen Feldern nicht (`albumIds` = Schnittmenge)
   - Asset in Album: `PUT /albums/<albumId>/assets` mit Body `{ "ids": ["<assetId>"] }`
 - Papierkorb:
   - Löschen (Trash): `DELETE /assets` mit Body `{ "ids": ["<assetId>"], "force": false }`
@@ -79,6 +82,13 @@
   - `.github/workflows/ci.yml` (PRs + `main`): Type-Check, Tests, Build, Docker-Build + `docker/smoke-test.sh`.
   - `.github/workflows/publish-ghcr.yml` baut, smoke-testet & pushed ein generisches Image nach GHCR (`ghcr.io/<owner>/<repo>`) bei Push auf `main` und Tags `v*` (keine Build-Args/Keys im Workflow → kein `VITE_SERVER_URL`, daher Konfiguration per `IMMICH_URL` + manuellem Login, Auto-Login nur via Custom Build).
 
+## UI / Design-System
+- Farben als Tokens in `src/style.css` (`@theme`): `app`, `surface` (Foto-Karte), `raised` (Sheets), `field`/`field-strong` (Inputs, Chips, Zeilen), `line`, `fg`, `muted`, `primary`/`primary-fg` (monochrom), Bedeutungsfarben `keep`, `delete`, `favorite`. Keine weiteren Akzentfarben (kein Blau/Indigo).
+- Dark Mode ist klassenbasiert (`.dark` auf `<html>`, gesetzt vom ui-Store bzw. vorab per Inline-Script in `index.html`); `dark:` folgt also dem App-Toggle, nicht dem System.
+- Alle Modals über `src/components/BottomSheet.vue` (Bottom-Sheet auf dem Handy, zentrierter Dialog ab `sm`, Esc/Swipe-down schließt, Safe-Areas). HomeView ignoriert Tastatur-Shortcuts, solange ein `[role="dialog"]` offen ist.
+- PWA: `viewport-fit=cover` + Safe-Area-Utilities (`pt-safe`, `pb-safe`, `px-safe`), `public/manifest.webmanifest`, Icons in `public/icons/` (aus `public/favicon.svg` gerendert), `.status-bar-scrim` hält die weiße iOS-Statusleiste im Light Mode lesbar. Kein Service Worker.
+- Nur Geräte mit Maus/Tastatur (`pointer-fine:`) zeigen Tastatur-Hinweise und die Hotkey-Zuordnung.
+
 ## Code-Map (wichtigste Stellen)
 - Routing/Auth:
   - `src/router/index.ts` (Guard: Redirects je nach Login/.env-Konfig)
@@ -89,9 +99,10 @@
 - Docker/Runtime:
   - `nginx.conf`, `docker/40-immich-swipe.sh`, `docker/smoke-test.sh`, `public/config.js`
 - UI/Interaktion:
-  - `src/views/HomeView.vue` (Hauptscreen, Keyboard: ←/→ Keep/Delete, ↑ oder Ctrl/⌘+Z = Undo)
-  - `src/components/SwipeCard.vue` (lädt Thumbnail/Video-Original als Blob mit Headern; Videos als `<video autoplay loop controls>`; Overlay-Button öffnet Asset-Detail in Immich `/photos/<id>`)
-  - `src/components/ActionButtons.vue` (Undo-Button; Keep/Delete Buttons nur Desktop)
+  - `src/views/HomeView.vue` (Hauptscreen, Keyboard: ←/→ Keep/Delete, ↑ oder Ctrl/⌘+Z = Undo, Enter bestätigt Löschen; Lösch-Rückfrage, Tutorial)
+  - `src/components/SwipeCard.vue` (lädt Thumbnail/Video-Original als Blob mit Headern; Videos als `<video autoplay loop controls>`; Info-Zeile unter dem Foto mit Alben + Link „Open in Immich“ als `<a target="_blank">` (#16, #34))
+  - `src/components/ActionButtons.vue` (Album, Delete, Favorite, Keep, Undo; Größen per `clamp()` mit px-Grenzen gegen Text-Zoom)
+  - `src/components/AppHeader.vue` + `SettingsSheet.vue` (Statistik, Einstellungen: Reihenfolge, Album-Filter, Skip Videos, Theme, Verlauf zurücksetzen, Logout), `TutorialSheet.vue` (#19), `AlbumPicker.vue`, `AuthLayout.vue` (Login/User-Auswahl)
   - `src/composables/useSwipe.ts` (Touch+Mouse Swipe-Erkennung)
   - `src/stores/ui.ts` + `src/components/LoadingOverlay.vue` + `src/components/ToastNotification.vue`
   - `src/style.css` (`overflow: hidden`, `viewport-fit` via `100dvh`, Safe-Area Utilities)

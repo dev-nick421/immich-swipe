@@ -12,6 +12,7 @@ Swipe-review your Immich library: right = keep, left = trash. Like a dating app,
 
 <p align="center">
   <img src="docs/screenshots/mobile.png" width="260" alt="Immich Swipe mobile view (sanitized demo)" />
+  <img src="docs/screenshots/settings.png" width="260" alt="Settings: order, album filter, skip videos, appearance (sanitized demo)" />
 </p>
 
 <p align="center">
@@ -24,12 +25,15 @@ Swipe-review your Immich library: right = keep, left = trash. Like a dating app,
 
 - Swipe (touch/mouse) or use keyboard/buttons
 - Random or chronological review (oldest/newest first)
+- Album filter: whole library, only photos in no album, or one album
+- Shows which albums a photo is in, and asks before deleting a photo that is in an album
 - Skip videos toggle
 - Favorite toggle (press `F`)
 - Add-to-album (+ configurable `0–9` hotkeys)
 - Undo (Ctrl/⌘+Z or ↑)
 - Reviewed cache + stats persisted per server/user
 - Preloads the next asset
+- Light and dark theme, installable as an app (PWA)
 
 ## Controls
 
@@ -40,6 +44,13 @@ Swipe-review your Immich library: right = keep, left = trash. Like a dating app,
 | Undo | `Ctrl/⌘+Z` or `↑` | ↶ |
 | Favorite | `F` | ♡ |
 | Add to album | `0–9` (configured) | Album icon |
+| Settings (order, album filter, skip videos, theme, history, logout) | | ⚙ in the header |
+
+A short "How it works" guide is shown on first start; reopen it from the settings.
+
+### Install as an app
+
+Open Immich Swipe in your phone's browser and use "Add to Home Screen" (iOS: Share menu, Android: browser menu). It then starts full screen like a native app.
 
 ## Quickstart
 
@@ -197,7 +208,8 @@ Requires Immich v1.116 or newer, including v2.x and v3.x.
 - `immich-swipe-skip-videos`
 - `immich-swipe-stats:<server>:<user>` (keep/delete counters)
 - `immich-swipe-reviewed:<server>:<user>` (already reviewed IDs + decision)
-- `immich-swipe-preferences:<server>:<user>` (order mode + album hotkeys)
+- `immich-swipe-preferences:<server>:<user>` (order mode, album filter, album hotkeys)
+- `immich-swipe-tutorial-seen` (the "How it works" guide was closed)
 
 ## Immich API key permissions
 
