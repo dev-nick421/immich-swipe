@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import type { ImmichAlbum } from '@/types/immich'
+import BottomSheet from '@/components/BottomSheet.vue'
 
 const props = defineProps<{
   open: boolean
@@ -8,6 +9,8 @@ const props = defineProps<{
   loading: boolean
   error: string | null
   hotkeys: Record<string, string>
+  // Albums that already contain the current asset (#20)
+  memberAlbumIds?: string[]
 }>()
 
 const emit = defineEmits<{
@@ -17,8 +20,6 @@ const emit = defineEmits<{
 }>()
 
 const search = ref('')
-const touchStart = ref<{ x: number; y: number } | null>(null)
-const touchDelta = ref({ x: 0, y: 0 })
 
 const filteredAlbums = computed(() => {
   if (!search.value) return props.albums
@@ -32,40 +33,24 @@ const hotkeyOptions = computed(() => props.albums.map((album) => ({
   value: album.id,
 })))
 
+const hotkeyByAlbum = computed(() => {
+  const map: Record<string, string> = {}
+  for (const [key, albumId] of Object.entries(props.hotkeys)) {
+    map[albumId] = key
+  }
+  return map
+})
+
+function isMember(album: ImmichAlbum): boolean {
+  return props.memberAlbumIds?.includes(album.id) ?? false
+}
+
 function handleSelect(album: ImmichAlbum) {
   emit('select', album)
 }
 
 function handleHotkeyChange(key: string, value: string) {
   emit('assignHotkey', key, value || null)
-}
-
-function handleTouchStart(event: TouchEvent) {
-  if (event.touches.length !== 1) return
-  const touch = event.touches[0]
-  touchStart.value = { x: touch.clientX, y: touch.clientY }
-  touchDelta.value = { x: 0, y: 0 }
-}
-
-function handleTouchMove(event: TouchEvent) {
-  if (!touchStart.value || event.touches.length !== 1) return
-  const touch = event.touches[0]
-  touchDelta.value = {
-    x: touch.clientX - touchStart.value.x,
-    y: touch.clientY - touchStart.value.y,
-  }
-}
-
-function handleTouchEnd() {
-  if (!touchStart.value) return
-  const { x, y } = touchDelta.value
-  const isSwipeDown = y > 80 && Math.abs(y) > Math.abs(x)
-  const isSwipeRight = x > 80 && Math.abs(x) > Math.abs(y)
-  if (isSwipeDown || isSwipeRight) {
-    emit('close')
-  }
-  touchStart.value = null
-  touchDelta.value = { x: 0, y: 0 }
 }
 
 watch(
@@ -79,139 +64,91 @@ watch(
 </script>
 
 <template>
-  <transition name="fade">
-    <div
-      v-if="open"
-      class="fixed inset-0 z-30 flex items-end sm:items-center justify-center bg-black/60 px-4"
-      style="padding-bottom: env(safe-area-inset-bottom);"
-      @click="emit('close')"
-    >
-      <transition name="sheet">
-        <div
-          v-if="open"
-          class="w-full max-w-3xl bg-white dark:bg-gray-900 rounded-t-2xl sm:rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[95vh] max-h-[95dvh] min-h-[85vh] min-h-[85dvh] sm:max-h-none sm:min-h-0"
-          @click.stop
+  <BottomSheet :open="open" title="Add to album" subtitle="Keeps the photo and adds it to the album" size="lg" tall @close="emit('close')">
+    <div class="flex min-h-0 flex-1 flex-col gap-4">
+      <div class="relative">
+        <svg class="pointer-events-none absolute left-3.5 top-1/2 size-4 -translate-y-1/2 text-muted" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-4.35-4.35M17 11a6 6 0 11-12 0 6 6 0 0112 0z" />
+        </svg>
+        <input
+          v-model="search"
+          type="text"
+          placeholder="Search albums"
+          class="h-11 w-full rounded-xl border border-transparent bg-field pl-10 pr-4 text-fg transition placeholder:text-muted focus:border-fg/20 focus:outline-none focus:ring-4 focus:ring-fg/10"
+        />
+      </div>
+
+      <div v-if="loading" class="flex items-center justify-center py-10">
+        <div class="size-8 animate-spin rounded-full border-4 border-fg/15 border-t-fg/60"></div>
+      </div>
+
+      <div v-else-if="error" class="rounded-xl bg-delete/10 px-4 py-3 text-sm text-delete">
+        {{ error }}
+      </div>
+
+      <div v-else class="-mx-2 grid min-h-0 flex-1 auto-rows-min grid-cols-1 gap-1 overflow-y-auto px-2 sm:max-h-[22rem] sm:flex-none sm:grid-cols-2">
+        <button
+          v-for="album in filteredAlbums"
+          :key="album.id"
+          type="button"
+          class="flex items-center gap-3 rounded-2xl px-3 py-2.5 text-left transition-colors hover:bg-field active:bg-field-strong"
+          @click="handleSelect(album)"
         >
-        <div
-          class="flex items-center justify-between px-4 py-3 border-b border-gray-200 dark:border-gray-800"
-          @touchstart="handleTouchStart"
-          @touchmove="handleTouchMove"
-          @touchend="handleTouchEnd"
-        >
-          <div class="flex flex-col leading-tight">
-            <p class="text-sm text-gray-500 dark:text-gray-400">Add to album</p>
-            <h2 class="text-xl font-semibold text-gray-900 dark:text-gray-50">Choose an album</h2>
-          </div>
-        </div>
+          <span class="flex size-10 shrink-0 items-center justify-center rounded-xl bg-field text-muted">
+            <svg class="size-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+            </svg>
+          </span>
+          <span class="min-w-0 flex-1">
+            <span class="block truncate font-medium">{{ album.albumName }}</span>
+            <span class="block text-xs text-muted">
+              <template v-if="isMember(album)">Already in this album</template>
+              <template v-else-if="album.assetCount !== undefined">{{ album.assetCount }} items</template>
+            </span>
+          </span>
+          <kbd
+            v-if="hotkeyByAlbum[album.id]"
+            class="hidden min-w-6 rounded-md bg-field px-1.5 py-0.5 text-center text-xs font-medium text-muted pointer-fine:inline-block"
+          >{{ hotkeyByAlbum[album.id] }}</kbd>
+          <svg v-if="isMember(album)" class="size-5 shrink-0 text-keep" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-label="Already in this album">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7" />
+          </svg>
+          <svg v-else class="size-5 shrink-0 text-muted" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 5v14m-7-7h14" />
+          </svg>
+        </button>
+        <p v-if="filteredAlbums.length === 0" class="col-span-full py-6 text-center text-sm text-muted">
+          No albums found.
+        </p>
+      </div>
 
-        <div class="px-4 py-3 safe-area-bottom flex flex-col gap-4 flex-1 min-h-0">
-          <div class="flex flex-col sm:flex-row gap-3">
-            <input
-              v-model="search"
-              type="text"
-              placeholder="Search album"
-              class="flex-1 px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
-            <div class="hidden sm:flex text-sm text-gray-500 dark:text-gray-400 items-center">
-              0–9 Hotkeys configurable below
-            </div>
-          </div>
-
-          <div v-if="loading" class="flex items-center justify-center py-10">
-            <div class="w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
-          </div>
-
-          <div v-else-if="error" class="p-4 rounded-lg bg-red-50 text-red-700 border border-red-200">
-            {{ error }}
-          </div>
-
-          <div v-else class="grid sm:grid-cols-2 gap-3 flex-1 min-h-0 overflow-y-auto pr-1 sm:max-h-[340px] sm:flex-none">
-            <div
-              v-for="album in filteredAlbums"
-              :key="album.id"
-              class="p-3 rounded-lg border border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-800/50 flex items-center justify-between gap-3 hover:border-blue-400 transition-colors"
+      <!-- Hotkeys only matter with a keyboard -->
+      <div class="hidden border-t border-line pt-4 pointer-fine:block">
+        <p class="mb-3 text-sm font-medium">Keyboard shortcuts <span class="font-normal text-muted">· press 0–9 to add the photo</span></p>
+        <div class="grid grid-cols-1 gap-2 sm:grid-cols-2">
+          <label
+            v-for="key in ['1','2','3','4','5','6','7','8','9','0']"
+            :key="key"
+            class="flex items-center gap-2.5"
+          >
+            <kbd class="flex size-8 shrink-0 items-center justify-center rounded-lg bg-field text-sm font-semibold">{{ key }}</kbd>
+            <select
+              class="h-9 min-w-0 flex-1 rounded-lg border border-transparent bg-field px-2.5 text-sm text-fg focus:border-fg/20 focus:outline-none focus:ring-4 focus:ring-fg/10"
+              :value="hotkeys[key] || ''"
+              @change="handleHotkeyChange(key, ($event.target as HTMLSelectElement).value)"
             >
-              <div>
-                <p class="font-medium text-gray-900 dark:text-gray-100">{{ album.albumName }}</p>
-                <p v-if="album.assetCount !== undefined" class="text-xs text-gray-500 dark:text-gray-400">
-                  {{ album.assetCount }} items
-                </p>
-              </div>
-              <button
-                class="px-3 py-1 rounded-full text-sm font-medium bg-blue-600 text-white hover:bg-blue-700 transition-colors"
-                @click="handleSelect(album)"
+              <option value="">Not set</option>
+              <option
+                v-for="option in hotkeyOptions"
+                :key="option.value"
+                :value="option.value"
               >
-                Add
-              </button>
-            </div>
-            <p v-if="filteredAlbums.length === 0" class="col-span-2 text-sm text-gray-500 dark:text-gray-400 py-4 text-center">
-              No albums found.
-            </p>
-          </div>
-
-          <div class="hidden sm:block border-t border-gray-200 dark:border-gray-800 pt-4">
-            <p class="text-sm font-semibold text-gray-800 dark:text-gray-100 mb-3">Hotkey mapping</p>
-            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div
-                v-for="key in ['0','1','2','3','4','5','6','7','8','9']"
-                :key="key"
-                class="flex items-center gap-3"
-              >
-                <span class="w-8 h-8 rounded-full bg-gray-100 dark:bg-gray-800 text-gray-800 dark:text-gray-200 flex items-center justify-center font-semibold border border-gray-200 dark:border-gray-700">
-                  {{ key }}
-                </span>
-                <select
-                  class="flex-1 px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  :value="hotkeys[key] || ''"
-                  @change="handleHotkeyChange(key, ($event.target as HTMLSelectElement).value)"
-                >
-                  <option value="">Not set</option>
-                  <option
-                    v-for="option in hotkeyOptions"
-                    :key="option.value"
-                    :value="option.value"
-                  >
-                    {{ option.label }}
-                  </option>
-                </select>
-              </div>
-            </div>
-          </div>
-          <div class="pt-2">
-            <button
-              class="w-full h-10 rounded-lg text-sm font-semibold transition-colors"
-              :class="[
-                'bg-blue-600 text-white hover:bg-blue-700'
-              ]"
-              @click="emit('close')"
-            >
-              Close
-            </button>
-          </div>
+                {{ option.label }}
+              </option>
+            </select>
+          </label>
         </div>
       </div>
-      </transition>
     </div>
-  </transition>
+  </BottomSheet>
 </template>
-
-<style scoped>
-.fade-enter-active,
-.fade-leave-active {
-  transition: opacity 0.2s ease;
-}
-.fade-enter-from,
-.fade-leave-to {
-  opacity: 0;
-}
-
-.sheet-enter-active,
-.sheet-leave-active {
-  transition: transform 0.3s ease, opacity 0.2s ease;
-}
-.sheet-enter-from,
-.sheet-leave-to {
-  transform: translateY(100%);
-  opacity: 0;
-}
-</style>

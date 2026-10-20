@@ -1,19 +1,72 @@
 @import "tailwindcss";
 
+/* Dark mode follows the app's theme toggle (the ui store sets .dark on <html>), not the OS setting */
+@custom-variant dark (&:where(.dark, .dark *));
+
+/* Design tokens: neutral surfaces, monochrome primary, color only where it carries meaning.
+   app = page, surface = photo card, raised = sheets/dialogs, field = inputs/chips/rows,
+   field-strong = hover/selected state of fields. */
+@theme {
+  --color-app: #ffffff;
+  --color-surface: #f4f4f5;
+  --color-raised: #ffffff;
+  --color-field: #f4f4f5;
+  --color-field-strong: #e4e4e7;
+  --color-line: #e4e4e7;
+  --color-fg: #09090b;
+  --color-muted: #71717a;
+  --color-primary: #09090b;
+  --color-primary-fg: #ffffff;
+  --color-keep: #10b981;
+  --color-delete: #f43f5e;
+  --color-favorite: #f59e0b;
+}
+
+.dark {
+  --color-app: #000000;
+  --color-surface: #18181b;
+  --color-raised: #18181b;
+  --color-field: #27272a;
+  --color-field-strong: #3f3f46;
+  --color-line: #27272a;
+  --color-fg: #fafafa;
+  --color-muted: #a1a1aa;
+  --color-primary: #fafafa;
+  --color-primary-fg: #09090b;
+  color-scheme: dark;
+}
+
+/* Safe areas (notch, status bar and home indicator of the installed PWA, needs viewport-fit=cover) */
+@utility pt-safe {
+  padding-top: env(safe-area-inset-top);
+}
+@utility pb-safe {
+  padding-bottom: env(safe-area-inset-bottom);
+}
+@utility px-safe {
+  padding-left: max(1rem, env(safe-area-inset-left));
+  padding-right: max(1rem, env(safe-area-inset-right));
+}
+
 /* Base styles */
-html, body, #app {
-  height: 100%;
+html,
+body {
   margin: 0;
   padding: 0;
-  overflow: hidden;
+  min-height: 100%;
+  background-color: var(--color-app);
+  color: var(--color-fg);
+  -webkit-tap-highlight-color: transparent;
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
 }
 
-/* Prevent pull-to-refresh on mobile */
+/* Prevent pull-to-refresh / rubber banding on mobile */
 body {
-  overscroll-behavior-y: contain;
+  overscroll-behavior-y: none;
 }
 
-/* Custom scrollbar for dark mode */
+/* Custom scrollbar */
 ::-webkit-scrollbar {
   width: 8px;
 }
@@ -23,12 +76,8 @@ body {
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #374151;
+  background: var(--color-field-strong);
   border-radius: 4px;
-}
-
-::-webkit-scrollbar-thumb:hover {
-  background: #4b5563;
 }
 
 /* Disable text selection on swipeable elements */
@@ -37,39 +86,25 @@ body {
   user-select: none;
 }
 
+/* Full-screen app view (home): exactly one viewport, never scrolls */
 .viewport-fit {
   height: 100dvh;
-  min-height: 100dvh;
-  max-height: 100dvh;
+  overflow: hidden;
 }
 
 @supports not (height: 100dvh) {
   .viewport-fit {
     height: 100vh;
-    min-height: 100vh;
-    max-height: 100vh;
   }
 }
 
-/* Safe area insets for notched devices */
-.safe-area-bottom {
-  padding-bottom: 1rem;
-}
-
-@supports (padding: env(safe-area-inset-top)) {
-  .min-h-screen {
-    min-height: calc(100vh - env(safe-area-inset-top) - env(safe-area-inset-bottom));
-    padding-top: env(safe-area-inset-top);
-    padding-bottom: env(safe-area-inset-bottom);
-  }
-
-  .viewport-fit {
-    padding-top: env(safe-area-inset-top);
-  }
-}
-
-@supports (padding: env(safe-area-inset-bottom)) {
-  .safe-area-bottom {
-    padding-bottom: calc(1rem + env(safe-area-inset-bottom));
-  }
+/* iOS draws the status bar of the installed PWA in white (black-translucent): keep it readable on
+   light backgrounds. The safe-area inset is only non-zero in the standalone app. */
+.status-bar-scrim {
+  position: fixed;
+  inset: 0 0 auto 0;
+  height: env(safe-area-inset-top);
+  background: #000;
+  z-index: 60;
+  pointer-events: none;
 }

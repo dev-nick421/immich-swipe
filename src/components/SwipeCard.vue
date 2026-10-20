@@ -1,20 +1,22 @@
 <script setup lang="ts">
 import { ref, computed, watch, onBeforeUnmount, nextTick } from 'vue'
 import { useSwipe } from '@/composables/useSwipe'
-import { useUiStore } from '@/stores/ui'
 import { useAuthStore } from '@/stores/auth'
-import type { ImmichAsset } from '@/types/immich'
+import type { ImmichAlbum, ImmichAsset } from '@/types/immich'
 
 const props = defineProps<{
   asset: ImmichAsset
+  // Albums that contain the asset (#20), null while unknown
+  albums?: ImmichAlbum[] | null
 }>()
+
+const albumNames = computed(() => (props.albums ?? []).map((album) => album.albumName).join(', '))
 
 const emit = defineEmits<{
   keep: []
   delete: []
 }>()
 
-const uiStore = useUiStore()
 const authStore = useAuthStore()
 
 const cardRef = ref<HTMLElement | null>(null)
@@ -265,81 +267,73 @@ const formattedDate = computed(() => {
 <template>
   <div
     ref="cardRef"
-    class="relative w-full h-full flex items-center justify-center select-none cursor-grab active:cursor-grabbing"
+    class="relative h-full w-full select-none cursor-grab active:cursor-grabbing"
     :style="cardStyle"
   >
-    <!-- Image container -->
-    <div class="relative w-full h-full flex items-center justify-center overflow-hidden rounded-2xl">
-      <!-- Loading placeholder -->
-      <div
-        v-if="(isVideo && (videoLoading || (!videoBlobUrl && !videoError))) || (!isVideo && !imageLoaded && !imageError)"
-        class="absolute inset-0 flex items-center justify-center"
-        :class="uiStore.isDarkMode ? 'bg-gray-800' : 'bg-gray-200'"
-      >
-        <div class="w-8 h-8 border-4 border-t-transparent rounded-full animate-spin"
-          :class="uiStore.isDarkMode ? 'border-white/50' : 'border-gray-500'"
-        ></div>
-      </div>
-
-      <!-- Error state -->
-      <div
-        v-if="(isVideo && videoError) || (!isVideo && imageError)"
-        class="absolute inset-0 flex flex-col items-center justify-center gap-2"
-        :class="uiStore.isDarkMode ? 'bg-gray-800 text-gray-400' : 'bg-gray-200 text-gray-600'"
-      >
-        <svg class="w-16 h-16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-        </svg>
-        <p>Failed to load media</p>
-      </div>
-
-      <!-- Actual image -->
-      <img
-        v-if="!isVideo && imageBlobUrl"
-        :src="imageBlobUrl"
-        :alt="asset.originalFileName"
-        class="w-full h-full object-contain"
-        draggable="false"
-      />
-
-      <!-- Actual video -->
-      <video
-        v-else-if="isVideo && videoBlobUrl && !videoError"
-        ref="videoRef"
-        :src="videoBlobUrl"
-        class="w-full h-full object-contain"
-        playsinline
-        webkit-playsinline
-        loop
-        controls
-      />
-
-      <!-- KEEP (right swipe) -->
-      <div
-        class="absolute inset-0 bg-green-500/30 flex items-center justify-center pointer-events-none transition-opacity"
-        :style="{ opacity: keepIndicatorOpacity }"
-      >
-        <div class="bg-green-500 text-white px-8 py-4 rounded-xl text-2xl font-bold transform -rotate-12 border-4 border-white">
-          KEEP
+    <div class="relative flex h-full w-full flex-col overflow-hidden rounded-3xl bg-surface shadow-xl shadow-black/10 ring-1 ring-line dark:shadow-none">
+      <!-- Media: contained in the card, never covered by captions or controls -->
+      <div class="relative flex min-h-0 flex-1 items-center justify-center">
+        <!-- Loading placeholder -->
+        <div
+          v-if="(isVideo && (videoLoading || (!videoBlobUrl && !videoError))) || (!isVideo && !imageLoaded && !imageError)"
+          class="absolute inset-0 flex items-center justify-center"
+        >
+          <div class="size-8 animate-spin rounded-full border-4 border-fg/15 border-t-fg/60"></div>
         </div>
-      </div>
 
-      <!-- DELETE (left swipe) -->
-      <div
-        class="absolute inset-0 bg-red-500/30 flex items-center justify-center pointer-events-none transition-opacity"
-        :style="{ opacity: deleteIndicatorOpacity }"
-      >
-        <div class="bg-red-500 text-white px-8 py-4 rounded-xl text-2xl font-bold transform rotate-12 border-4 border-white">
-          DELETE
+        <!-- Error state -->
+        <div
+          v-if="(isVideo && videoError) || (!isVideo && imageError)"
+          class="absolute inset-0 flex flex-col items-center justify-center gap-2 text-muted"
+        >
+          <svg class="size-12" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+          </svg>
+          <p class="text-sm">Failed to load media</p>
         </div>
-      </div>
-    </div>
 
-    <!-- media info -->
-    <div
-      class="absolute bottom-0 left-0 right-0 p-4 bg-gradient-to-t from-black/70 to-transparent rounded-b-2xl"
-    >
-      <div class="flex items-start gap-3">
+        <!-- Actual image -->
+        <img
+          v-if="!isVideo && imageBlobUrl"
+          :src="imageBlobUrl"
+          :alt="asset.originalFileName"
+          class="h-full w-full object-contain"
+          draggable="false"
+        />
+
+        <!-- Actual video -->
+        <video
+          v-else-if="isVideo && videoBlobUrl && !videoError"
+          ref="videoRef"
+          :src="videoBlobUrl"
+          class="h-full w-full object-contain"
+          playsinline
+          webkit-playsinline
+          loop
+          controls
+        />
+      </div>
+
+      <!-- Media info -->
+      <div class="flex shrink-0 items-center gap-3 border-t border-line px-4 py-3">
+        <div class="min-w-0 flex-1">
+          <p class="flex items-center gap-1.5 text-sm font-medium">
+            <svg v-if="isVideo" class="size-4 shrink-0 text-muted" fill="currentColor" viewBox="0 0 24 24" aria-label="Video">
+              <path d="M8 5.14v13.72a1 1 0 001.52.85l10.6-6.86a1 1 0 000-1.7L9.52 4.29A1 1 0 008 5.14z" />
+            </svg>
+            <span class="truncate">{{ asset.originalFileName }}</span>
+          </p>
+          <p class="flex min-w-0 items-center gap-1.5 text-xs text-muted">
+            <span class="shrink-0">{{ formattedDate }}</span>
+            <template v-if="albumNames">
+              <span aria-hidden="true">·</span>
+              <svg class="size-3.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-label="In albums">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+              </svg>
+              <span class="truncate" :title="`In ${albumNames}`">{{ albumNames }}</span>
+            </template>
+          </p>
+        </div>
         <!-- A plain link: opens exactly one new tab, and an installed PWA hands it to the browser
              instead of navigating itself away (#16, #34) -->
         <a
@@ -347,7 +341,7 @@ const formattedDate = computed(() => {
           :href="assetPageUrl"
           target="_blank"
           rel="noopener noreferrer"
-          class="inline-flex items-center justify-center w-8 h-8 rounded-full bg-black/40 text-white shadow-lg backdrop-blur-sm transition hover:bg-black/60 active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/80 cursor-pointer shrink-0"
+          class="inline-flex size-9 shrink-0 items-center justify-center rounded-full bg-field text-fg transition-colors hover:bg-field-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-fg/40"
           aria-label="Open in Immich"
           title="Open in Immich"
           draggable="false"
@@ -356,14 +350,30 @@ const formattedDate = computed(() => {
           @touchstart.stop
           @mousedown.stop
         >
-          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <svg class="size-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 17L17 7M10 7h7v7" />
           </svg>
         </a>
-        <div class="min-w-0">
-          <p class="text-white text-sm truncate">{{ asset.originalFileName }}</p>
-          <p class="text-white/70 text-xs">{{ formattedDate }}</p>
-        </div>
+      </div>
+    </div>
+
+    <!-- KEEP (right swipe) -->
+    <div
+      class="pointer-events-none absolute inset-0 flex items-center justify-center rounded-3xl bg-keep/25 transition-opacity"
+      :style="{ opacity: keepIndicatorOpacity }"
+    >
+      <div class="-rotate-12 rounded-2xl border-4 border-white bg-keep px-6 py-2.5 text-2xl font-black tracking-widest text-white shadow-xl">
+        KEEP
+      </div>
+    </div>
+
+    <!-- DELETE (left swipe) -->
+    <div
+      class="pointer-events-none absolute inset-0 flex items-center justify-center rounded-3xl bg-delete/25 transition-opacity"
+      :style="{ opacity: deleteIndicatorOpacity }"
+    >
+      <div class="rotate-12 rounded-2xl border-4 border-white bg-delete px-6 py-2.5 text-2xl font-black tracking-widest text-white shadow-xl">
+        DELETE
       </div>
     </div>
   </div>

@@ -8,16 +8,13 @@ const uiStore = useUiStore()
   <Transition name="fade">
     <div
       v-if="uiStore.isLoading"
-      class="fixed inset-0 z-50 flex items-center justify-center"
-      :class="uiStore.isDarkMode ? 'bg-black/80' : 'bg-white/80'"
+      class="fixed inset-0 z-[70] flex items-center justify-center bg-app/80 backdrop-blur-sm"
+      role="status"
+      aria-live="polite"
     >
       <div class="flex flex-col items-center gap-4">
-        <div class="w-12 h-12 border-4 border-t-transparent rounded-full animate-spin"
-          :class="uiStore.isDarkMode ? 'border-white' : 'border-gray-800'"
-        ></div>
-        <p v-if="uiStore.loadingMessage" class="text-lg"
-          :class="uiStore.isDarkMode ? 'text-white' : 'text-gray-800'"
-        >
+        <div class="size-10 animate-spin rounded-full border-4 border-fg/15 border-t-fg"></div>
+        <p v-if="uiStore.loadingMessage" class="text-fg">
           {{ uiStore.loadingMessage }}
         </p>
       </div>

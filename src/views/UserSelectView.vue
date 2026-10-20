@@ -4,6 +4,7 @@ import { useAuthStore } from '@/stores/auth'
 import { useUiStore } from '@/stores/ui'
 import { useImmich } from '@/composables/useImmich'
 import type { EnvUser } from '@/types/immich'
+import AuthLayout from '@/components/AuthLayout.vue'
 
 const router = useRouter()
 const authStore = useAuthStore()
@@ -27,61 +28,23 @@ async function selectUser(user: EnvUser) {
 </script>
 
 <template>
-  <div class="min-h-screen flex flex-col items-center justify-center p-6"
-    :class="uiStore.isDarkMode ? 'bg-black text-white' : 'bg-white text-black'"
-  >
-    <div class="w-full max-w-md">
-      <!-- Logo/Title -->
-      <div class="text-center mb-8">
-        <h1 class="text-3xl font-bold mb-2">Immich Swipe</h1>
-        <p :class="uiStore.isDarkMode ? 'text-gray-400' : 'text-gray-600'">
-          Who's swiping ?
-        </p>
-      </div>
-
-      <!-- User buttons -->
-      <div class="space-y-4">
-        <button
-          v-for="user in authStore.envUsers"
-          :key="user.name"
-          @click="selectUser(user)"
-          class="w-full py-4 px-6 rounded-xl font-medium text-lg transition-all transform hover:scale-102 active:scale-98 shadow-lg flex items-center justify-center gap-3"
-          :class="uiStore.isDarkMode
-            ? 'bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white'
-            : 'bg-gradient-to-r from-indigo-500 to-purple-500 hover:from-indigo-400 hover:to-purple-400 text-white'"
-        >
-          <!-- User icon -->
-          <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-          </svg>
-          {{ user.name }}
-        </button>
-      </div>
-
-      <!-- Theme toggle -->
-      <div class="mt-8 flex justify-center">
-        <button
-          @click="uiStore.toggleDarkMode"
-          class="flex items-center gap-2 text-sm transition-colors"
-          :class="uiStore.isDarkMode ? 'text-gray-400 hover:text-white' : 'text-gray-600 hover:text-black'"
-        >
-          <svg v-if="uiStore.isDarkMode" class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" />
-          </svg>
-          <svg v-else class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" />
-          </svg>
-        </button>
-      </div>
+  <AuthLayout subtitle="Who's swiping?">
+    <div class="space-y-3">
+      <button
+        v-for="user in authStore.envUsers"
+        :key="user.name"
+        type="button"
+        class="flex w-full items-center gap-3 rounded-2xl bg-field p-3 text-left transition hover:bg-field-strong active:scale-[0.99]"
+        @click="selectUser(user)"
+      >
+        <span class="flex size-11 shrink-0 items-center justify-center rounded-full bg-primary text-lg font-semibold text-primary-fg">
+          {{ user.name.charAt(0).toUpperCase() }}
+        </span>
+        <span class="min-w-0 flex-1 truncate text-lg font-medium">{{ user.name }}</span>
+        <svg class="size-5 shrink-0 text-muted" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
+        </svg>
+      </button>
     </div>
-  </div>
+  </AuthLayout>
 </template>
-
-<style scoped>
-.hover\:scale-102:hover {
-  transform: scale(1.02);
-}
-.active\:scale-98:active {
-  transform: scale(0.98);
-}
-</style>
