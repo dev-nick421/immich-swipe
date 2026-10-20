@@ -27,6 +27,7 @@ describe('useImmich album flow', () => {
   }
 
   beforeEach(() => {
+    localStorage.clear()
     setActivePinia(createPinia())
     vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, ..._rest: unknown[]) => {
       const url = typeof input === 'string' ? input : input.toString()
@@ -35,7 +36,7 @@ describe('useImmich album flow', () => {
         return new Response('{}', { status: 200 })
       }
 
-      if (url.includes('/assets/random')) {
+      if (url.includes('/search/random')) {
         return new Response(JSON.stringify([dummyAsset]), { status: 200 })
       }
 

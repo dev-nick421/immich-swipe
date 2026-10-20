@@ -1,7 +1,5 @@
 # Docker Compose
 
-version: "3.8"
-
 services:
   immich-swipe:
     build:
@@ -24,4 +22,17 @@ services:
     restart: unless-stopped
     ports:
       - "2293:80"
+    environment:
+      # Optional. The built-in Immich API proxy (no CORS setup needed) forwards to VITE_SERVER_URL.
+      # Set IMMICH_URL only if this container must reach Immich under another address than your
+      # browser, e.g. http://immich-server:2283 on Immich's Docker network. Read at container
+      # start, no rebuild needed.
+      - IMMICH_URL=${IMMICH_URL:-}
+    # To reach Immich by container name, join Immich's Docker network (see `docker network ls`):
+    # networks:
+    #   - immich
 
+# networks:
+#   immich:
+#     name: immich_default
+#     external: true

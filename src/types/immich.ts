@@ -17,7 +17,7 @@ export interface ImmichAsset {
   isTrashed: boolean
   isOffline: boolean
   hasMetadata: boolean
-  duration?: string
+  duration?: string | number | null
   exifInfo?: {
     city?: string
     country?: string
@@ -33,6 +33,9 @@ export interface ImmichAsset {
 export interface ImmichConfig {
   serverUrl: string
   apiKey: string
+  userName?: string
+  // 'env' = logged in via a VITE_USER_* entry, 'manual' = login form
+  source?: 'env' | 'manual'
 }
 
 export interface DeleteAssetsRequest {
@@ -67,23 +70,28 @@ export interface AddAssetsToAlbumRequest {
   ids: string[]
 }
 
+export type AssetVisibility = 'archive' | 'timeline' | 'hidden' | 'locked'
+
+// POST /search/random (replaces GET /assets/random, which Immich v3 removed)
+export interface RandomSearchRequest {
+  size?: number
+  type?: 'IMAGE' | 'VIDEO'
+  visibility?: AssetVisibility
+}
+
+// POST /search/metadata (only the fields this app uses)
 export interface MetadataSearchRequest {
-  take?: number
-  skip?: number
   page?: number
   size?: number
   order?: 'asc' | 'desc'
-  assetType?: ('IMAGE' | 'VIDEO')[]
+  visibility?: AssetVisibility
 }
 
 export interface MetadataSearchResponse {
-  items?: ImmichAsset[]
-  hasNextPage?: boolean
-  count?: number
-  nextPage?: string | number | null
   assets?: {
     total?: number
     count?: number
-    items: ImmichAsset[]
+    items?: ImmichAsset[]
+    nextPage?: string | null
   }
 }
