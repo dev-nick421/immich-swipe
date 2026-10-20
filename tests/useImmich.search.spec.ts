@@ -55,7 +55,9 @@ describe('useImmich search requests', () => {
     useAuthStore().setConfig('http://immich.example.com', 'api-key', 'Alice')
   })
 
-  afterEach(() => {
+  afterEach(async () => {
+    // Let preloads and album lookups started by the test finish against the mock
+    await new Promise((resolve) => setTimeout(resolve, 10))
     vi.unstubAllGlobals()
   })
 

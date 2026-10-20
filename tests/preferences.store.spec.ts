@@ -33,6 +33,26 @@ describe('preferences store', () => {
     expect(prefsReloaded.albumHotkeys['1']).toBe('album-a')
   })
 
+  it('persists the album filter and ignores invalid stored values', async () => {
+    const auth = useAuthStore()
+    auth.setConfig('http://server-a', 'key-a', 'Alice')
+    const prefs = usePreferencesStore()
+    prefs.setAlbumFilter({ type: 'album', albumId: 'album-1', albumName: 'Family' })
+    await nextTick()
+
+    const key = Object.keys(localStorage).find((k) => k.startsWith('immich-swipe-preferences'))!
+    expect(JSON.parse(localStorage.getItem(key) || '{}').albumFilter).toEqual({
+      type: 'album',
+      albumId: 'album-1',
+      albumName: 'Family',
+    })
+
+    localStorage.setItem(key, JSON.stringify({ reviewOrder: 'random', albumFilter: { type: 'album' } }))
+    setActivePinia(createPinia())
+    useAuthStore().setConfig('http://server-a', 'key-a', 'Alice')
+    expect(usePreferencesStore().albumFilter).toEqual({ type: 'all' })
+  })
+
   it('switches namespace when user changes', async () => {
     const auth = useAuthStore()
     auth.setConfig('http://server-a', 'key-a', 'Alice')

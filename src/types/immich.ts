@@ -77,6 +77,8 @@ export interface RandomSearchRequest {
   size?: number
   type?: 'IMAGE' | 'VIDEO'
   visibility?: AssetVisibility
+  isNotInAlbum?: boolean
+  albumIds?: string[]
 }
 
 // POST /search/metadata (only the fields this app uses)
@@ -85,6 +87,8 @@ export interface MetadataSearchRequest {
   size?: number
   order?: 'asc' | 'desc'
   visibility?: AssetVisibility
+  isNotInAlbum?: boolean
+  albumIds?: string[]
 }
 
 export interface MetadataSearchResponse {
