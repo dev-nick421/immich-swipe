@@ -93,19 +93,10 @@ Open `http://localhost:2293`.
 
 Note: `VITE_*` values from `.env` are passed as build args and end up in the frontend bundle, so changing them requires `docker compose up -d --build`. The optional `IMMICH_URL` is read when the container starts; changing it only needs `docker compose up -d`.
 
-### GitHub Pages
+### Updating
 
-This repo includes a GitHub Actions workflow that builds and deploys the SPA to GitHub Pages on every push to `main`.
-
-After enabling Pages in your repo settings, your URL will be:
-- `https://<owner>.github.io/<repo>/`
-
-<details>
-  <summary>Login screen</summary>
-  <p align="center">
-    <img src="docs/screenshots/login.png" width="320" alt="Login screen" />
-  </p>
-</details>
+- Prebuilt image: `docker compose pull && docker compose up -d`
+- Built with `.env`: `git pull && docker compose up -d --build`
 
 ## Configuration
 
@@ -142,6 +133,13 @@ If you don’t configure `.env` users, the app asks for:
 
 Those values are stored in `localStorage` under `immich-swipe-config`.
 
+<details>
+  <summary>Login screen</summary>
+  <p align="center">
+    <img src="docs/screenshots/login.png" width="260" alt="Login screen" />
+  </p>
+</details>
+
 ## Connecting to Immich
 
 Immich Swipe has no backend: your browser calls Immich's API (`/api/...`) with the `x-api-key` header. Immich only sends CORS headers in development builds, so a browser on another origin (the Immich Swipe URL) is blocked unless one of the following is set up.
@@ -159,7 +157,7 @@ Both are normally the same address, the one you open Immich with in your browser
 
 ### Option 2: CORS headers on your reverse proxy
 
-When the proxy is off (prebuilt image without `IMMICH_URL`, or the static build hosted elsewhere, e.g. GitHub Pages), the browser calls the Immich server URL directly. Add CORS headers in the reverse proxy in front of Immich (for Nginx Proxy Manager: the Immich proxy host's configuration):
+When the proxy is off (prebuilt image without `IMMICH_URL`, or the `npm run build` output served by another web server), the browser calls the Immich server URL directly. Add CORS headers in the reverse proxy in front of Immich (for Nginx Proxy Manager: the Immich proxy host's configuration):
 
 ```nginx
 add_header 'Access-Control-Allow-Origin' '*' always;
@@ -223,7 +221,7 @@ An API key with all permissions works. For a restricted key, grant:
 | Play videos | `asset.download` |
 | Delete (trash) and undo | `asset.delete` |
 | Favorite | `asset.update` |
-| List albums | `album.read` |
+| Albums (list, marks, filter) | `album.read` |
 | Add to album | `albumAsset.create` |
 
 ## Development scripts
