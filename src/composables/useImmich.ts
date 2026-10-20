@@ -28,6 +28,11 @@ export function useImmich() {
   const RANDOM_MAX_ATTEMPTS = 20
 
   const albumsCache = ref<ImmichAlbum[] | null>(null)
+  // Albums that contain an asset (#20), by asset id; requests in flight are shared
+  const assetAlbums = ref<Record<string, ImmichAlbum[]>>({})
+  const assetAlbumRequests = new Map<string, Promise<ImmichAlbum[] | null>>()
+  // Set while a delete waits for confirmation because the asset is in an album (#20)
+  const deleteConfirmation = ref<{ asset: ImmichAsset; albums: ImmichAlbum[] } | null>(null)
 
   const chronologicalQueue = ref<ImmichAsset[]>([])
   // Next page to request; null once the last page has been loaded
@@ -58,12 +63,24 @@ export function useImmich() {
     nextAsset.value = null
     pendingAssets.value = []
     actionHistory.value = []
+    deleteConfirmation.value = null
+  }
+
+  // Album filter from the settings (#20), same fields for random and metadata search
+  function applyAlbumFilter(body: RandomSearchRequest | MetadataSearchRequest) {
+    const filter = preferencesStore.albumFilter
+    if (filter.type === 'not-in-album') {
+      body.isNotInAlbum = true
+    } else if (filter.type === 'album') {
+      body.albumIds = [filter.albumId]
+    }
   }
 
   watch(
     () => [authStore.serverUrl, authStore.currentUserName],
     () => {
       albumsCache.value = null
+      assetAlbums.value = {}
       resetReviewFlow()
     }
   )
@@ -190,6 +207,7 @@ export function useImmich() {
         if (uiStore.skipVideos) {
           body.type = 'IMAGE'
         }
+        applyAlbumFilter(body)
         // GET /assets/random was removed in Immich v3; POST /search/random works on v1.116+
         const assets = await apiRequest<ImmichAsset[]>('/search/random', {
           method: 'POST',
@@ -199,10 +217,14 @@ export function useImmich() {
           continue
         }
 
-        const candidate = assets.find(isReviewable)
+        // The asset on screen isn't reviewed yet, so the preload must skip it explicitly
+        const candidate = assets.find((asset) => isReviewable(asset) && asset.id !== currentAsset.value?.id)
         if (candidate) return candidate
       }
 
+      if (preferencesStore.albumFilter.type !== 'all') {
+        throw new Error('No unreviewed photos match the album filter. Change it in the settings.')
+      }
       if (uiStore.skipVideos) {
         throw new Error('No unreviewed photos found after skipping videos.')
       }
@@ -221,6 +243,7 @@ export function useImmich() {
       // Explicit: Immich v3 otherwise also returns hidden assets (e.g. live photo video parts)
       visibility: 'timeline',
     }
+    applyAlbumFilter(body)
 
     const response = await apiRequest<MetadataSearchResponse>('/search/metadata', {
       method: 'POST',
@@ -298,7 +321,9 @@ export function useImmich() {
       if (currentAsset.value) {
         preloadNextAsset()
       } else {
-        if (preferencesStore.reviewOrder !== 'random') {
+        if (preferencesStore.albumFilter.type !== 'all') {
+          error.value = 'No photos match the album filter. Change it in the settings.'
+        } else if (preferencesStore.reviewOrder !== 'random') {
           error.value = uiStore.skipVideos
             ? 'No photos found in chronological mode after skipping videos.'
             : 'No photos found in chronological mode.'
@@ -353,9 +378,10 @@ export function useImmich() {
 
   // Move to the next asset
   function moveToNextAsset(): void {
-    if (nextAsset.value) {
-      currentAsset.value = nextAsset.value
-      nextAsset.value = null
+    const next = nextAsset.value
+    nextAsset.value = null
+    if (next && !reviewedStore.isReviewed(next.id)) {
+      currentAsset.value = next
       preloadNextAsset()
     } else {
       loadInitialAsset(false)
@@ -410,6 +436,42 @@ export function useImmich() {
     albumsCache.value = albums
     return albums
   }
+
+  // Albums containing the asset; null if they could not be loaded (e.g. no album.read permission)
+  function fetchAssetAlbums(assetId: string): Promise<ImmichAlbum[] | null> {
+    const cached = assetAlbums.value[assetId]
+    if (cached) return Promise.resolve(cached)
+    const inFlight = assetAlbumRequests.get(assetId)
+    if (inFlight) return inFlight
+
+    const request = apiRequest<ImmichAlbum[]>(`/albums?assetId=${encodeURIComponent(assetId)}`)
+      .then((albums) => {
+        const list = Array.isArray(albums) ? albums : []
+        assetAlbums.value = { ...assetAlbums.value, [assetId]: list }
+        return list
+      })
+      .catch((e) => {
+        console.warn('Failed to load albums of asset:', e)
+        return null
+      })
+      .finally(() => assetAlbumRequests.delete(assetId))
+    assetAlbumRequests.set(assetId, request)
+    return request
+  }
+
+  const currentAssetAlbums = computed(() =>
+    currentAsset.value ? assetAlbums.value[currentAsset.value.id] ?? null : null
+  )
+
+  // Load album membership for the visible asset and the preloaded one
+  watch(
+    () => [currentAsset.value?.id, nextAsset.value?.id],
+    (ids) => {
+      for (const id of ids) {
+        if (id) fetchAssetAlbums(id)
+      }
+    }
+  )
 
   async function addAssetToAlbum(albumId: string, assetId: string): Promise<void> {
     await apiRequest(`/albums/${albumId}/assets`, {
@@ -472,6 +534,10 @@ export function useImmich() {
     const assetToKeep = currentAsset.value
     try {
       await addAssetToAlbum(album.id, assetToKeep.id)
+      const known = assetAlbums.value[assetToKeep.id]
+      if (known && !known.some((item) => item.id === album.id)) {
+        assetAlbums.value = { ...assetAlbums.value, [assetToKeep.id]: [...known, album] }
+      }
       preferencesStore.setLastUsedAlbumId(album.id)
       actionHistory.value.push({
         asset: assetToKeep,
@@ -519,11 +585,41 @@ export function useImmich() {
     }
   }
 
-  // Delete
+  // Delete; assets that are in an album need a confirmation first (#20)
+  let deletingAssetId: string | null = null
   async function deletePhoto(): Promise<void> {
     if (!currentAsset.value) return
 
     const assetToDelete = currentAsset.value
+    // A second swipe/keypress while this one is running would delete twice and skip an asset
+    if (deletingAssetId === assetToDelete.id) return
+    deletingAssetId = assetToDelete.id
+    try {
+      const albums = await fetchAssetAlbums(assetToDelete.id)
+      if (currentAsset.value?.id !== assetToDelete.id) return
+      if (albums && albums.length > 0) {
+        deleteConfirmation.value = { asset: assetToDelete, albums }
+        return
+      }
+      await trashAsset(assetToDelete)
+    } finally {
+      deletingAssetId = null
+    }
+  }
+
+  async function confirmDelete(): Promise<void> {
+    const confirmation = deleteConfirmation.value
+    deleteConfirmation.value = null
+    if (confirmation && currentAsset.value?.id === confirmation.asset.id) {
+      await trashAsset(confirmation.asset)
+    }
+  }
+
+  function cancelDelete(): void {
+    deleteConfirmation.value = null
+  }
+
+  async function trashAsset(assetToDelete: ImmichAsset): Promise<void> {
     const success = await deleteAsset(assetToDelete.id)
 
     if (success) {
@@ -591,6 +687,10 @@ export function useImmich() {
     keepPhotoToAlbum,
     toggleFavorite,
     deletePhoto,
+    confirmDelete,
+    cancelDelete,
+    deleteConfirmation,
+    currentAssetAlbums,
     undoLastAction,
     canUndo,
     getAssetThumbnailUrl,

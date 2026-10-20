@@ -48,7 +48,9 @@ describe('useImmich album flow', () => {
     }))
   })
 
-  afterEach(() => {
+  afterEach(async () => {
+    // Let preloads and album lookups started by the test finish against the mock
+    await new Promise((resolve) => setTimeout(resolve, 10))
     vi.unstubAllGlobals()
   })
 

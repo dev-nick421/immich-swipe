@@ -4,16 +4,37 @@ import { useAuthStore } from '@/stores/auth'
 import { useRouter } from 'vue-router'
 import { usePreferencesStore } from '@/stores/preferences'
 import { useReviewedStore } from '@/stores/reviewed'
-import { ref } from 'vue'
+import { computed, ref } from 'vue'
+import AppLogo from '@/components/AppLogo.vue'
+import BottomSheet from '@/components/BottomSheet.vue'
+import SettingsSheet from '@/components/SettingsSheet.vue'
+import type { ImmichAlbum } from '@/types/immich'
+
+defineProps<{
+  albums: ImmichAlbum[]
+  albumsLoading: boolean
+  albumsError: string | null
+}>()
+
+const emit = defineEmits<{
+  loadAlbums: []
+}>()
 
 const uiStore = useUiStore()
 const authStore = useAuthStore()
 const preferencesStore = usePreferencesStore()
 const reviewedStore = useReviewedStore()
 const router = useRouter()
+const showSettings = ref(false)
 const showResetModal = ref(false)
 
+// Non-default filters are easy to forget once they're behind the settings button
+const hasActiveFilters = computed(
+  () => uiStore.skipVideos || preferencesStore.reviewOrder !== 'random' || preferencesStore.albumFilter.type !== 'all'
+)
+
 function logout() {
+  showSettings.value = false
   authStore.clearConfig()
   uiStore.resetStats()
 
@@ -29,18 +50,8 @@ function logout() {
   }
 }
 
-function toggleReviewOrder() {
-  const current = preferencesStore.reviewOrder
-  const next =
-    current === 'random'
-      ? 'chronological'
-      : current === 'chronological'
-        ? 'chronological-desc'
-        : 'random'
-  preferencesStore.setReviewOrder(next)
-}
-
 function openResetModal() {
+  showSettings.value = false
   showResetModal.value = true
 }
 
@@ -57,207 +68,91 @@ function confirmResetReviewed() {
 </script>
 
 <template>
-  <header class="flex items-center justify-between px-4 py-3 max-w-4xl mx-auto">
-    <div class="flex items-center gap-3">
-      <!-- Title -->
-      <h1 class="text-xl font-bold sm:inline hidden"
-          :class="uiStore.isDarkMode ? 'text-white' : 'text-gray-900'">
-        Immich Swipe
-      </h1>
+  <header class="mx-auto flex h-14 w-full max-w-4xl shrink-0 items-center gap-2 px-safe">
+    <div class="flex min-w-0 flex-1 items-center gap-2.5">
+      <AppLogo class="size-7 shrink-0 rounded-lg" />
+      <h1 class="truncate text-base font-semibold tracking-tight">Immich Swipe</h1>
       <!-- User badge -->
-      <span v-if="authStore.currentUserName" 
-        class="px-2 py-0.5 text-xs rounded-full"
-        :class="uiStore.isDarkMode ? 'bg-indigo-900 text-indigo-200' : 'bg-indigo-100 text-indigo-700'"
+      <span
+        v-if="authStore.currentUserName"
+        class="max-w-[7rem] shrink-0 truncate rounded-full bg-field px-2.5 py-0.5 text-xs font-medium text-muted"
       >
         {{ authStore.currentUserName }}
       </span>
-      <!-- Theme toggle -->
-      <button
-        @click="uiStore.toggleDarkMode()"
-        class="p-2 rounded-full transition-colors"
-        :class="uiStore.isDarkMode ? 'hover:bg-gray-800 text-white' : 'hover:bg-gray-200 text-gray-700'"
-        aria-label="Toggle theme">
-          <!-- Sun (dark mode) -->
-          <svg v-if="uiStore.isDarkMode" class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" />
-          </svg>
-          <!-- Moon (!dark mode) -->
-          <svg v-else class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" />
-          </svg>
-      </button>
-
-      <!-- Stats -->
-      <button
-        type="button"
-        class="flex items-center gap-2 text-sm px-3 py-1 rounded-full border transition-colors"
-        :class="uiStore.isDarkMode
-          ? 'border-gray-700 text-gray-300 hover:bg-gray-800'
-          : 'border-gray-200 text-gray-600 hover:bg-gray-100'"
-        aria-label="Reset reviewed items"
-        title="Reset reviewed items"
-        @click="openResetModal"
-      >
-        <span class="flex items-center gap-1">
-          <svg class="w-4 h-4 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
-          </svg>
-          {{ uiStore.keptCount }}
-        </span>
-        <span class="flex items-center gap-1">
-          <svg class="w-4 h-4 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
-          </svg>
-          {{ uiStore.deletedCount }}
-        </span>
-      </button>
-
-      <!-- Skip videos toggle -->
-      <button
-        @click="uiStore.toggleSkipVideos()"
-        class="flex items-center gap-2 px-3 py-1 rounded-full text-xs font-medium border transition-colors"
-        :class="uiStore.skipVideos
-          ? 'bg-green-600 border-green-500 text-white'
-          : uiStore.isDarkMode
-            ? 'border-gray-700 text-gray-300 hover:bg-gray-800'
-            : 'border-gray-300 text-gray-600 hover:bg-gray-100'"
-        :aria-pressed="uiStore.skipVideos"
-      >
-        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path
-            stroke-linecap="round"
-            stroke-linejoin="round"
-            stroke-width="2"
-            d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14m-3 4h7a2 2 0 002-2V8a2 2 0 00-2-2h-7M9 18H6a2 2 0 01-2-2V8a2 2 0 012-2h3m0 12V6"
-          />
-        </svg>
-        <span>
-          Skip videos
-        </span>
-      </button>
-
-      <!-- Review order toggle -->
-      <button
-        @click="toggleReviewOrder"
-        class="flex items-center gap-2 px-3 py-1 rounded-full text-xs font-medium border transition-colors"
-        :class="preferencesStore.reviewOrder !== 'random'
-          ? 'bg-blue-600 border-blue-500 text-white'
-          : uiStore.isDarkMode
-            ? 'border-gray-700 text-gray-300 hover:bg-gray-800'
-            : 'border-gray-300 text-gray-600 hover:bg-gray-100'"
-        :aria-pressed="preferencesStore.reviewOrder !== 'random'"
-        :aria-label="preferencesStore.reviewOrder === 'chronological'
-          ? 'Order: Oldest first'
-          : preferencesStore.reviewOrder === 'chronological-desc'
-            ? 'Order: Newest first'
-            : 'Order: Random'"
-        :title="preferencesStore.reviewOrder === 'chronological'
-          ? 'Order: Oldest first'
-          : preferencesStore.reviewOrder === 'chronological-desc'
-            ? 'Order: Newest first'
-            : 'Order: Random'"
-      >
-        <span>Order:</span>
-        <svg
-          v-if="preferencesStore.reviewOrder === 'random'"
-          class="w-4 h-4"
-          fill="none"
-          stroke="currentColor"
-          viewBox="0 0 24 24"
-        >
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 3h5v5" />
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 20L21 3" />
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 16v5h-5" />
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 15l6 6" />
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4l5 5" />
-        </svg>
-        <svg
-          v-else-if="preferencesStore.reviewOrder === 'chronological'"
-          class="w-4 h-4"
-          fill="none"
-          stroke="currentColor"
-          viewBox="0 0 24 24"
-        >
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8h10M4 12h7M4 16h4M18 18V6m0 0-3 3m3-3 3 3" />
-        </svg>
-        <svg
-          v-else
-          class="w-4 h-4"
-          fill="none"
-          stroke="currentColor"
-          viewBox="0 0 24 24"
-        >
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8h4M4 12h7M4 16h10M18 6v12m0 0-3-3m3 3 3-3" />
-        </svg>
-      </button>
-      <!-- Logout / Switch User -->
-      <button
-        @click="logout"
-        class="p-2 rounded-full transition-colors"
-        :class="uiStore.isDarkMode ? 'hover:bg-gray-800 text-white' : 'hover:bg-gray-200 text-gray-700'"
-        :aria-label="authStore.hasEnvConfig && !authStore.hasSingleEnvUser ? 'Switch user' : 'Logout'"
-        :title="authStore.hasEnvConfig && !authStore.hasSingleEnvUser ? 'Switch user' : 'Logout'"
-      >
-        <!-- Switch user icon for multi-user env -->
-        <svg v-if="authStore.hasEnvConfig && !authStore.hasSingleEnvUser" class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-        </svg>
-        <!-- Logout icon for manual login -->
-        <svg v-else class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
-        </svg>
-      </button>
     </div>
+
+    <!-- Stats -->
+    <button
+      type="button"
+      class="flex h-9 shrink-0 items-center gap-3 rounded-full bg-field px-3 text-sm font-medium tabular-nums transition-colors hover:bg-field-strong"
+      aria-label="Reset reviewed items"
+      title="Reset reviewed items"
+      @click="openResetModal"
+    >
+      <span class="flex items-center gap-1">
+        <svg class="size-4 text-keep" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7" />
+        </svg>
+        {{ uiStore.keptCount }}
+      </span>
+      <span class="flex items-center gap-1">
+        <svg class="size-4 text-delete" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M6 18L18 6M6 6l12 12" />
+        </svg>
+        {{ uiStore.deletedCount }}
+      </span>
+    </button>
+
+    <!-- Settings -->
+    <button
+      type="button"
+      class="relative -mr-1.5 inline-flex size-10 shrink-0 items-center justify-center rounded-full text-fg transition-colors hover:bg-field"
+      aria-label="Settings"
+      title="Settings"
+      @click="showSettings = true"
+    >
+      <svg class="size-[1.375rem]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+      </svg>
+      <span v-if="hasActiveFilters" class="absolute right-1.5 top-1.5 size-2 rounded-full bg-fg ring-2 ring-app" />
+    </button>
   </header>
 
-  <div
-    v-if="showResetModal"
-    class="fixed inset-0 z-40 flex items-center justify-center bg-black/60 px-4"
-    @click="closeResetModal"
-  >
-    <div
-      class="w-full max-w-md rounded-2xl shadow-2xl border p-5 text-left"
-      :class="uiStore.isDarkMode ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-200'"
-      @click.stop
-    >
-      <h2
-        class="text-lg font-semibold"
-        :class="uiStore.isDarkMode ? 'text-gray-100' : 'text-gray-900'"
-      >
-        Reset reviewed history?
-      </h2>
-      <p
-        class="mt-2 text-sm"
-        :class="uiStore.isDarkMode ? 'text-gray-400' : 'text-gray-600'"
-      >
-        This clears the counters and removes all already visited image and video IDs.
-      </p>
-      <div
-        class="mt-4 flex items-center justify-between rounded-lg px-3 py-2 text-sm"
-        :class="uiStore.isDarkMode ? 'bg-gray-800 text-gray-300' : 'bg-gray-50 text-gray-700'"
-      >
-        <span>Kept: {{ uiStore.keptCount }}</span>
-        <span>Deleted: {{ uiStore.deletedCount }}</span>
-      </div>
-      <div class="mt-5 flex items-center justify-end gap-2">
-        <button
-          type="button"
-          class="px-4 py-2 rounded-full text-sm font-medium border transition-colors"
-          :class="uiStore.isDarkMode
-            ? 'border-gray-700 text-gray-200 hover:bg-gray-800'
-            : 'border-gray-300 text-gray-700 hover:bg-gray-100'"
-          @click="closeResetModal"
-        >
-          Cancel
-        </button>
-        <button
-          type="button"
-          class="px-4 py-2 rounded-full text-sm font-semibold text-white bg-red-600 hover:bg-red-700 transition-colors"
-          @click="confirmResetReviewed"
-        >
-          Reset
-        </button>
-      </div>
+  <SettingsSheet
+    :open="showSettings"
+    :albums="albums"
+    :albums-loading="albumsLoading"
+    :albums-error="albumsError"
+    @close="showSettings = false"
+    @reset="openResetModal"
+    @logout="logout"
+    @load-albums="emit('loadAlbums')"
+  />
+
+  <BottomSheet :open="showResetModal" title="Reset review history?" size="sm" @close="closeResetModal">
+    <p class="text-sm text-muted">
+      This clears the counters and forgets which photos and videos you have already reviewed. Nothing is deleted in Immich.
+    </p>
+    <div class="mt-4 flex items-center justify-between rounded-2xl bg-field px-4 py-3 text-sm tabular-nums">
+      <span>Kept: {{ uiStore.keptCount }}</span>
+      <span>Deleted: {{ uiStore.deletedCount }}</span>
     </div>
-  </div>
+    <div class="mt-5 grid grid-cols-2 gap-2">
+      <button
+        type="button"
+        class="h-11 rounded-xl bg-field font-medium transition-colors hover:bg-field-strong"
+        @click="closeResetModal"
+      >
+        Cancel
+      </button>
+      <button
+        type="button"
+        class="h-11 rounded-xl bg-delete font-semibold text-white transition hover:opacity-90"
+        @click="confirmResetReviewed"
+      >
+        Reset
+      </button>
+    </div>
+  </BottomSheet>
 </template>

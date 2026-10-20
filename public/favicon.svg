@@ -1,17 +1,17 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
-  <defs>
-    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" style="stop-color:#4f46e5"/>
-      <stop offset="100%" style="stop-color:#7c3aed"/>
-    </linearGradient>
-  </defs>
-  <rect width="100" height="100" rx="20" fill="url(#bg)"/>
-  <!-- Photo frame -->
-  <rect x="20" y="25" width="60" height="50" rx="5" fill="white" opacity="0.9"/>
-  <!-- Mountain/photo content -->
-  <path d="M20 65 L35 50 L50 60 L65 40 L80 65 L80 70 L20 70 Z" fill="#c4b5fd"/>
-  <!-- Sun -->
-  <circle cx="65" cy="38" r="8" fill="#fde68a"/>
-  <!-- Swipe arrow -->
-  <path d="M50 85 L65 85 L55 80 M65 85 L55 90" stroke="white" stroke-width="3" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <rect width="512" height="512" rx="112" fill="#09090b"/>
+  <!-- card behind: the photo you already swiped -->
+  <rect x="146" y="118" width="220" height="276" rx="36" fill="#3f3f46" transform="rotate(-12 256 256)"/>
+  <!-- current photo card -->
+  <g transform="rotate(8 256 256)">
+    <rect x="146" y="118" width="220" height="276" rx="36" fill="#fafafa"/>
+    <clipPath id="photo"><rect x="166" y="138" width="180" height="180" rx="20"/></clipPath>
+    <g clip-path="url(#photo)">
+      <rect x="166" y="138" width="180" height="180" fill="#fde68a"/>
+      <circle cx="300" cy="190" r="24" fill="#f59e0b"/>
+      <path d="M166 318 L166 270 L216 226 L252 258 L292 214 L346 266 L346 318 Z" fill="#27272a"/>
+    </g>
+    <circle cx="316" cy="356" r="18" fill="#10b981"/>
+    <path d="M307 356 L314 363 L326 350" stroke="#fafafa" stroke-width="6" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+  </g>
 </svg>

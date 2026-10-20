@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, onUnmounted, ref, watch } from 'vue'
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useImmich } from '@/composables/useImmich'
 import { useUiStore } from '@/stores/ui'
 import { usePreferencesStore } from '@/stores/preferences'
@@ -8,6 +8,8 @@ import AppHeader from '@/components/AppHeader.vue'
 import SwipeCard from '@/components/SwipeCard.vue'
 import ActionButtons from '@/components/ActionButtons.vue'
 import AlbumPicker from '@/components/AlbumPicker.vue'
+import BottomSheet from '@/components/BottomSheet.vue'
+import TutorialSheet from '@/components/TutorialSheet.vue'
 
 const {
   currentAsset,
@@ -17,6 +19,10 @@ const {
   keepPhotoToAlbum,
   toggleFavorite,
   deletePhoto,
+  confirmDelete,
+  cancelDelete,
+  deleteConfirmation,
+  currentAssetAlbums,
   undoLastAction,
   fetchAlbums,
   canUndo,
@@ -29,8 +35,28 @@ const isLoadingAlbums = ref(false)
 const albumsError = ref<string | null>(null)
 const albums = ref<ImmichAlbum[]>([])
 
+const memberAlbumIds = computed(() => (currentAssetAlbums.value ?? []).map((album) => album.id))
+const deleteConfirmationText = computed(() => {
+  const names = deleteConfirmation.value?.albums.map((album) => album.albumName) ?? []
+  if (names.length <= 1) return `It is in the album ${names[0] ?? ''}.`
+  return `It is in ${names.length} albums: ${names.join(', ')}.`
+})
+
 // Keyboard navigation
 function handleKeydown(e: KeyboardEvent) {
+  if (deleteConfirmation.value) {
+    // Enter confirms, unless a control inside the dialog (e.g. Cancel) has focus and handles it
+    const active = document.activeElement
+    const focusInDialog = active instanceof HTMLElement && active.closest('[role="dialog"]')
+    if (e.key === 'Enter' && !focusInDialog) {
+      e.preventDefault()
+      confirmDelete()
+    }
+    return
+  }
+  // Sheets (settings, album picker, tutorial, ...) own the keyboard while open, not while closing
+  if (document.querySelector('[role="dialog"]:not(.sheet-leave-active)')) return
+
   if (e.key === 'ArrowUp') {
     e.preventDefault()
     undoLastAction()
@@ -73,7 +99,7 @@ function shouldIgnoreHotkeys(): boolean {
 }
 
 async function ensureAlbumsLoaded() {
-  if (albums.value.length > 0) return
+  if (albums.value.length > 0 || isLoadingAlbums.value) return
   try {
     isLoadingAlbums.value = true
     albumsError.value = null
@@ -109,10 +135,11 @@ function handleAssignHotkey(key: string, albumId: string | null) {
 }
 
 watch(
-  () => preferencesStore.reviewOrder,
+  () => [preferencesStore.reviewOrder, preferencesStore.albumFilter],
   async () => {
     await loadInitialAsset()
-  }
+  },
+  { deep: true }
 )
 
 onMounted(() => {
@@ -126,115 +153,71 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div class="viewport-fit flex flex-col"
-    :class="uiStore.isDarkMode ? 'bg-black text-white' : 'bg-white text-black'"
-  >
-    <AppHeader />
+  <div class="viewport-fit flex flex-col bg-app pt-safe text-fg">
+    <AppHeader
+      :albums="albums"
+      :albums-loading="isLoadingAlbums"
+      :albums-error="albumsError"
+      @load-albums="ensureAlbumsLoaded"
+    />
 
     <!-- Main content -->
-    <main class="flex-1 flex flex-col px-4 safe-area-bottom min-h-0 gap-3 overflow-hidden">
+    <main class="mx-auto flex min-h-0 w-full max-w-4xl flex-1 flex-col px-safe pb-[max(0.5rem,env(safe-area-inset-bottom))]">
       <!-- Error state -->
-      <div v-if="error && !currentAsset" class="flex-1 flex flex-col items-center justify-center gap-4">
-        <div class="text-center">
-          <svg class="w-16 h-16 mx-auto mb-4"
-            :class="uiStore.isDarkMode ? 'text-gray-600' : 'text-gray-400'"
-            fill="none" stroke="currentColor" viewBox="0 0 24 24"
-          >
+      <div v-if="error && !currentAsset" class="flex flex-1 flex-col items-center justify-center gap-5 px-2 text-center">
+        <span class="flex size-14 items-center justify-center rounded-full bg-field text-muted">
+          <svg class="size-7" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
           </svg>
-          <p class="text-lg"
-            :class="uiStore.isDarkMode ? 'text-gray-400' : 'text-gray-600'"
-          >
-            {{ error }}
-          </p>
-        </div>
+        </span>
+        <p class="max-w-md text-balance text-muted">
+          {{ error }}
+        </p>
         <button
+          type="button"
+          class="h-11 rounded-full bg-primary px-6 font-semibold text-primary-fg transition hover:opacity-90 active:scale-95"
           @click="() => loadInitialAsset()"
-          class="px-6 py-2 rounded-lg transition-colors"
-          :class="uiStore.isDarkMode
-            ? 'bg-white text-black hover:bg-gray-200'
-            : 'bg-black text-white hover:bg-gray-800'"
         >
-          Try Again
+          Try again
         </button>
       </div>
 
       <!-- Swipe area -->
-      <div v-else class="flex-1 flex flex-col min-h-0 gap-2">
-        <!-- Card container -->
-        <div class="flex-1 min-h-0 flex items-center justify-center p-1">
-          <div v-if="currentAsset" class="w-full h-full max-w-4xl max-h-full">
-            <SwipeCard
-              :asset="currentAsset"
-              @keep="keepPhoto"
-              @delete="deletePhoto"
-            />
-          </div>
-
-          <!-- Empty state while loading -->
-          <div v-else class="flex h-full items-center justify-center"
-            :class="uiStore.isDarkMode ? 'text-gray-600' : 'text-gray-400'"
-          >
-            <svg class="w-16 h-16 animate-pulse" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-            </svg>
-          </div>
-        </div>
-
-        <div class="shrink-0 flex flex-col items-center gap-2">
-          <!-- Action buttons -->
-          <ActionButtons
+      <template v-else>
+        <div class="flex min-h-0 flex-1 items-center justify-center pt-1">
+          <SwipeCard
             v-if="currentAsset"
-            class="-mx-4 sm:mx-0"
-            :can-undo="canUndo"
-            :is-favorite="currentAsset?.isFavorite ?? false"
+            :asset="currentAsset"
+            :albums="currentAssetAlbums"
             @keep="keepPhoto"
             @delete="deletePhoto"
-            @undo="undoLastAction"
-            @toggle-favorite="toggleFavorite"
-            @open-album-picker="openAlbumPicker"
-            @album-drop="openAlbumPicker"
           />
 
-          <!-- Instructions (now mobile -> hidden) -->
-          <div class="hidden sm:flex text-center text-sm py-2 items-center flex-col gap-y-2"
-            :class="uiStore.isDarkMode ? 'text-gray-500' : 'text-gray-400'"
-          >
-            <!-- Mobile -->
-            <div class="sm:hidden flex gap-x-2">
-              <span class="px-3 py-1 rounded-full text-xs font-medium border transition-colors border-green-700 text-green-600 bg-green-300">
-                RIGHT 
-                
-              </span>
-              <div
-                class="w-px h-6"
-                :class="uiStore.isDarkMode ? 'bg-gray-700' : 'bg-gray-300'"
-              ></div>
-              <span class="px-3 py-1 rounded-full text-xs font-medium border transition-colors border-red-700 text-red-600 bg-red-300">
-                LEFT
-              </span>
-            </div>
-            <!-- Desktop -->
-            <div class="hidden sm:flex gap-x-3">
-              <span class="flex gap-x-2 px-3 py-1 rounded-full text-xs font-medium border transition-colors border-red-700 text-red-600 bg-red-300">
-                LEFT
-                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
-              </span>
-              <div
-                class="w-px h-6"
-                :class="uiStore.isDarkMode ? 'bg-gray-700' : 'bg-gray-300'"
-              ></div>
-              <span class="flex gap-x-2 px-3 py-1 rounded-full text-xs font-medium border transition-colors border-green-700 bg-green-300 text-green-600">
-                RIGHT 
-                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>
-              </span>
-            </div>
-            <p class="hidden sm:flex">
-              (←/→) • Ctrl+Z or ↑ (back) • F = favorite • 0–9 = album hotkeys
-            </p>
-          </div>
+          <!-- Placeholder while loading -->
+          <div v-else class="h-full w-full animate-pulse rounded-3xl bg-surface"></div>
         </div>
-      </div>
+
+        <ActionButtons
+          :class="currentAsset ? '' : 'pointer-events-none opacity-40'"
+          :can-undo="canUndo"
+          :is-favorite="currentAsset?.isFavorite ?? false"
+          @keep="keepPhoto"
+          @delete="deletePhoto"
+          @undo="undoLastAction"
+          @toggle-favorite="toggleFavorite"
+          @open-album-picker="openAlbumPicker"
+          @album-drop="openAlbumPicker"
+        />
+
+        <!-- Keyboard shortcuts, only on devices with a keyboard -->
+        <p class="hidden flex-wrap items-center justify-center gap-x-4 gap-y-1 pb-2 text-xs text-muted pointer-fine:flex">
+          <span><kbd class="rounded bg-field px-1.5 py-0.5 font-sans">←</kbd> Delete</span>
+          <span><kbd class="rounded bg-field px-1.5 py-0.5 font-sans">→</kbd> Keep</span>
+          <span><kbd class="rounded bg-field px-1.5 py-0.5 font-sans">↑</kbd> Undo</span>
+          <span><kbd class="rounded bg-field px-1.5 py-0.5 font-sans">F</kbd> Favorite</span>
+          <span><kbd class="rounded bg-field px-1.5 py-0.5 font-sans">0–9</kbd> Album</span>
+        </p>
+      </template>
     </main>
 
     <AlbumPicker
@@ -243,9 +226,35 @@ onUnmounted(() => {
       :loading="isLoadingAlbums"
       :error="albumsError"
       :hotkeys="preferencesStore.albumHotkeys"
+      :member-album-ids="memberAlbumIds"
       @close="closeAlbumPicker"
       @select="handleAlbumSelected"
       @assign-hotkey="handleAssignHotkey"
     />
+
+    <!-- Deleting an asset that is in an album needs a confirmation (#20) -->
+    <BottomSheet :open="!!deleteConfirmation" title="Delete this photo?" size="sm" @close="cancelDelete">
+      <p class="text-sm text-muted">
+        {{ deleteConfirmationText }} In the trash it is hidden from the album too, until you restore it.
+      </p>
+      <div class="mt-5 grid grid-cols-2 gap-2">
+        <button
+          type="button"
+          class="h-11 rounded-xl bg-field font-medium transition-colors hover:bg-field-strong"
+          @click="cancelDelete"
+        >
+          Cancel
+        </button>
+        <button
+          type="button"
+          class="h-11 rounded-xl bg-delete font-semibold text-white transition hover:opacity-90"
+          @click="confirmDelete"
+        >
+          Delete
+        </button>
+      </div>
+    </BottomSheet>
+
+    <TutorialSheet />
   </div>
 </template>

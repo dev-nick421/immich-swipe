@@ -22,9 +22,18 @@ export const useUiStore = defineStore('ui', () => {
     skipVideos.value = storedSkipVideos === 'true'
   }
 
+  // Theme lives on <html> so Tailwind's dark: variant and the color tokens follow the app toggle
+  // (index.html applies it before the first paint to avoid a white flash)
+  function applyTheme(dark: boolean) {
+    document.documentElement.classList.toggle('dark', dark)
+    document.querySelector('meta[name="theme-color"]')?.setAttribute('content', dark ? '#000000' : '#ffffff')
+  }
+  applyTheme(isDarkMode.value)
+
   // Watch and persist changes
   watch(isDarkMode, (newValue) => {
     localStorage.setItem('immich-swipe-theme', newValue ? 'dark' : 'light')
+    applyTheme(newValue)
   })
 
   watch(skipVideos, (newValue) => {
@@ -37,6 +46,19 @@ export const useUiStore = defineStore('ui', () => {
 
   function toggleSkipVideos() {
     skipVideos.value = !skipVideos.value
+  }
+
+  // One-time "How it works" tutorial (#19), can be reopened from the settings
+  const TUTORIAL_KEY = 'immich-swipe-tutorial-seen'
+  const showTutorial = ref<boolean>(localStorage.getItem(TUTORIAL_KEY) !== '1')
+
+  function openTutorial() {
+    showTutorial.value = true
+  }
+
+  function closeTutorial() {
+    showTutorial.value = false
+    localStorage.setItem(TUTORIAL_KEY, '1')
   }
 
   // Loading state
@@ -154,5 +176,8 @@ export const useUiStore = defineStore('ui', () => {
     resetStats,
     skipVideos,
     toggleSkipVideos,
+    showTutorial,
+    openTutorial,
+    closeTutorial,
   }
 })

@@ -4,28 +4,26 @@ import { computed } from 'vue'
 
 const uiStore = useUiStore()
 
-const toastClasses = computed(() => {
-  const base = 'fixed top-24 left-1/2 -translate-x-1/2 px-6 py-3 rounded-full shadow-lg transition-all duration-300 z-50'
-  const visibility = uiStore.showToast ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4 pointer-events-none'
-
-  let color = ''
+const colorClass = computed(() => {
   switch (uiStore.toastType) {
     case 'success':
-      color = 'bg-green-600 text-white'
-      break
+      return 'bg-keep text-white'
     case 'error':
-      color = 'bg-red-600 text-white'
-      break
+      return 'bg-delete text-white'
     default:
-      color = uiStore.isDarkMode ? 'bg-gray-700 text-white' : 'bg-gray-200 text-gray-900'
+      return 'bg-fg text-app'
   }
-
-  return `${base} ${visibility} ${color}`
 })
 </script>
 
 <template>
-  <div :class="toastClasses">
+  <!-- Below the header, clear of the notch / status bar -->
+  <div
+    class="pointer-events-none fixed left-1/2 top-[calc(env(safe-area-inset-top)+4rem)] z-[80] w-max max-w-[calc(100vw-2rem)] -translate-x-1/2 rounded-full px-4 py-2.5 text-center text-sm font-medium shadow-lg transition-all duration-300"
+    :class="[colorClass, uiStore.showToast ? 'translate-y-0 opacity-100' : '-translate-y-2 opacity-0']"
+    role="status"
+    aria-live="polite"
+  >
     {{ uiStore.toastMessage }}
   </div>
 </template>
