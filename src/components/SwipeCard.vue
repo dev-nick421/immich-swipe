@@ -108,20 +108,6 @@ function getAuthHeaders(): Record<string, string> {
   }
 }
 
-function openInImmich() {
-  const url = assetPageUrl.value
-  if (!url) return
-  const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent)
-  if (isMobile) {
-    window.location.assign(url)
-    return
-  }
-  const opened = window.open(url, '_blank', 'noopener')
-  if (!opened) {
-    window.location.assign(url)
-  }
-}
-
 // Fetch image with auth headers
 async function fetchImage() {
   imageLoaded.value = false
@@ -354,13 +340,18 @@ const formattedDate = computed(() => {
       class="absolute bottom-0 left-0 right-0 p-4 bg-gradient-to-t from-black/70 to-transparent rounded-b-2xl"
     >
       <div class="flex items-start gap-3">
-        <button
-          type="button"
-          class="inline-flex items-center justify-center w-8 h-8 rounded-full bg-black/40 text-white shadow-lg backdrop-blur-sm transition hover:bg-black/60 active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/80 cursor-pointer disabled:cursor-not-allowed disabled:opacity-40 shrink-0"
-          :disabled="!canOpenInImmich"
+        <!-- A plain link: opens exactly one new tab, and an installed PWA hands it to the browser
+             instead of navigating itself away (#16, #34) -->
+        <a
+          v-if="canOpenInImmich"
+          :href="assetPageUrl"
+          target="_blank"
+          rel="noopener noreferrer"
+          class="inline-flex items-center justify-center w-8 h-8 rounded-full bg-black/40 text-white shadow-lg backdrop-blur-sm transition hover:bg-black/60 active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/80 cursor-pointer shrink-0"
           aria-label="Open in Immich"
           title="Open in Immich"
-          @click.stop="openInImmich"
+          draggable="false"
+          @click.stop
           @pointerdown.stop
           @touchstart.stop
           @mousedown.stop
@@ -368,7 +359,7 @@ const formattedDate = computed(() => {
           <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 17L17 7M10 7h7v7" />
           </svg>
-        </button>
+        </a>
         <div class="min-w-0">
           <p class="text-white text-sm truncate">{{ asset.originalFileName }}</p>
           <p class="text-white/70 text-xs">{{ formattedDate }}</p>
