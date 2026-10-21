@@ -1,5 +1,7 @@
 # Build stage
-FROM node:22-alpine AS builder
+# Runs on the build machine's platform: dist/ is plain JS/CSS, the same for every target, and
+# npm under QEMU emulation (multi-arch builds) crashes randomly.
+FROM --platform=$BUILDPLATFORM node:22-alpine AS builder
 
 WORKDIR /app
 

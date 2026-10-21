@@ -77,6 +77,7 @@
 - Die `VITE_*` Werte der `.env` werden als **Build-Args** in den Build gebacken (siehe `Dockerfile` + `docker-compose.yml`).
   - Änderung der `VITE_*` Werte erfordert Rebuild (`docker compose up -d --build`); `IMMICH_URL` nur Recreate.
 - Runtime-Server ist Nginx (`nginx:alpine`) und serviert `dist/` + `nginx.conf` + `docker/40-immich-swipe.sh` (Entrypoint-Hook).
+- Die Build-Stage läuft auf der Build-Plattform (`FROM --platform=$BUILDPLATFORM`), nur die Nginx-Stage pro Zielarchitektur: `dist/` ist plattformunabhängig, und `npm ci` unter QEMU (arm64-Build) stürzte sporadisch ab und hing bis zum Job-Timeout.
 - `.gitattributes` erzwingt LF für `*.sh`/`*.conf` (CRLF würde den Entrypoint-Hook brechen).
 - CI/CD:
   - `.github/workflows/ci.yml` (PRs + `main`): Type-Check, Tests, Build, Docker-Build + `docker/smoke-test.sh`.
